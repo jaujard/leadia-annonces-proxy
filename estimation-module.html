@@ -264,6 +264,8 @@ function inseeHeaders(){const h={"Accept":"application/json"};if(window.INSEE_TO
 const E=n=>isFinite(n)&&n?Math.round(n).toLocaleString("fr-FR")+" €":"—";
 const E0=n=>isFinite(n)&&n?Math.round(n).toLocaleString("fr-FR"):"—";
 const $=id=>document.getElementById(id);
+/* fetch avec timeout (évite que analyse() se fige sur un endpoint lent) */
+async function tfetch(url,ms,opt){const c=new AbortController();const t=setTimeout(()=>c.abort(),ms||9000);try{return await fetch(url,Object.assign({signal:c.signal},opt||{}));}finally{clearTimeout(t);}}
 /* taux d'intérêt historiques (25 ans) — observés sur cadastre.com */
 const RATES={2019:1.39,2020:1.52,2021:0.99,2022:1.59,2023:3.69,2024:3.65,2025:3.25,2026:3.31};
 const RATE_NOW=3.31;
@@ -342,7 +344,7 @@ const PAGE_GROUP={infos:"Présentation du bien",localisation:"Présentation du b
   services:"Mes Services",avis:"Mes Avis",annexes:"Annexes"};
 const GROUP_PILL={"Présentation du bien":"🏠","Analyse Secteur":"📈","Calcul du Prix":"🧮","Mes Services":"🛎️","Mes Avis":"⭐","Annexes":"📎"};
 /* visibilité = toggle PDF (œil orange) */
-const vis={infos:1,localisation:1,description:1,photos:0,interets:0,insee:0,budgets:1,historique:1,annonces_s:1,dvf:1,ventes1:1,ventes2:1,immometre:1,annonces_c:1,prixvente:1,synthese:1,acquereur:1,services:1,avis:1,annexes:0};
+const vis={infos:1,localisation:1,description:1,photos:0,interets:1,insee:1,budgets:1,historique:1,annonces_s:1,dvf:1,ventes1:1,ventes2:1,immometre:1,annonces_c:1,prixvente:1,synthese:1,acquereur:1,services:1,avis:1,annexes:0};
 const openGrp={"Présentation du bien":1,"Analyse Secteur":1,"Calcul du Prix":1};
 let curKey="infos";
 
@@ -398,8 +400,9 @@ function scrollToPage(k){const el=$("pg-"+k);if(el)el.scrollIntoView({behavior:"
 
 /* ===================== DONNÉES ===================== */
 function median(a){if(!a.length)return null;const s=[...a].sort((x,y)=>x-y);const m=Math.floor(s.length/2);return s.length%2?s[m]:(s[m-1]+s[m])/2;}
-async function odsAll(where,extra){let out=[];for(let off=0;off<600;off+=100){const r=await fetch(DVF+"?where="+encodeURIComponent(where)+"&limit=100&offset="+off+(extra||"")+"&order_by=date_mutation desc");const d=await r.json();out=out.concat(d.results||[]);if((d.results||[]).length<100)break;}return out;}
-async function fetchAnnoncesComparables(lat,lon,type){if(window.ANNONCES_API){try{const l=await window.ANNONCES_API({comparables:true,lat,lon,type,rayon:1.5});return (l||[]).filter(a=>a.surface>0&&a.prix>0);}catch(e){}}return [];}
+async function odsAll(where,extra){let out=[];for(let off=0;off<600;off+=100){try{const r=await tfetch(DVF+"?where="+encodeURIComponent(where)+"&limit=100&offset="+off+(extra||"")+"&order_by=date_mutation desc",12000);const d=await r.json();out=out.concat(d.results||[]);if((d.results||[]).length<100)break;}catch(e){break;}}return out;}
+function withTimeout(p,ms){return Promise.race([Promise.resolve(p).catch(()=>null),new Promise(r=>setTimeout(()=>r(null),ms||12000))]);}
+async function fetchAnnoncesComparables(lat,lon,type){if(window.ANNONCES_API){const l=await withTimeout(window.ANNONCES_API({comparables:true,lat,lon,type,rayon:1.5}),12000);if(l)return l.filter(a=>a.surface>0&&a.prix>0);}return [];}
 
 async function analyse(){
   const lat=M.lat,lon=M.lon;if(!lat)return;
@@ -426,7 +429,7 @@ async function analyse(){
   // 3) Historique par année
   try{
     const wy="within_distance(geo_point, geom'POINT("+lon+" "+lat+")', 1500m) and nature_mutation='Vente' and type_local='"+M.type+"' and surface_reelle_bati>9 and date_mutation>='2019-01-01'";
-    const ry=await fetch(DVF+"?where="+encodeURIComponent(wy)+"&group_by="+encodeURIComponent("year(date_mutation) as an")+"&select="+encodeURIComponent("an, count(*) as nb, avg(valeur_fonciere/surface_reelle_bati) as pm2")+"&order_by=an&limit=20");
+    const ry=await tfetch(DVF+"?where="+encodeURIComponent(wy)+"&group_by="+encodeURIComponent("year(date_mutation) as an")+"&select="+encodeURIComponent("an, count(*) as nb, avg(valeur_fonciere/surface_reelle_bati) as pm2")+"&order_by=an&limit=20",12000);
     const dy=await ry.json();
     M.histo=(dy.results||[]).filter(x=>x.an).map(x=>{const m2=Math.round(x.pm2||0);const taux=RATES[x.an]||RATE_NOW;const pv=Math.round(m2*M.surface);return {an:x.an,nb:x.nb,taux,m2,pv,rev:Math.round(revenuRequis(pv,taux))};});
     M.secteur={annees:M.histo};
@@ -438,7 +441,7 @@ async function analyse(){
   // 5) cadastre
   try{
     const dd=0.0004,bb=(lat-dd)+","+(lon-dd)+","+(lat+dd)+","+(lon+dd);
-    const r=await fetch(WFS+"?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=CADASTRALPARCELS.PARCELLAIRE_EXPRESS:parcelle&SRSNAME=CRS:84&OUTPUTFORMAT=application/json&COUNT=6&BBOX="+bb);
+    const r=await tfetch(WFS+"?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=CADASTRALPARCELS.PARCELLAIRE_EXPRESS:parcelle&SRSNAME=CRS:84&OUTPUTFORMAT=application/json&COUNT=6&BBOX="+bb,10000);
     const d2=await r.json();M.cadastre=(d2.features||[]).map(f=>({insee:f.properties.code_insee,section:f.properties.section,numero:f.properties.numero,sup:f.properties.contenance})).slice(0,4);
   }catch(e){}
   // 6) POI (OSM Overpass)
@@ -453,7 +456,7 @@ async function analyse(){
 /* ---- agrégats DVF (graphes bleus « ventes passées ») ---- */
 async function odsAgg(where,group,select,order,limit){
   const u=DVF+"?where="+encodeURIComponent(where)+"&group_by="+encodeURIComponent(group)+"&select="+encodeURIComponent(select)+(order?"&order_by="+encodeURIComponent(order):"")+"&limit="+(limit||20);
-  const r=await fetch(u);const d=await r.json();return d.results||[];
+  try{const r=await tfetch(u,12000);const d=await r.json();return d.results||[];}catch(e){return [];}
 }
 async function fetchDvfAgg(lat,lon){
   M.dvfAgg=null;
@@ -481,7 +484,7 @@ async function fetchAnnoncesAgg(lat,lon){
   try{
     let all=[];
     for(const t of ["Maison","Appartement"]){
-      const l=await window.ANNONCES_API({comparables:true,lat,lon,type:t,rayon:6,limit:200});
+      const l=await withTimeout(window.ANNONCES_API({comparables:true,lat,lon,type:t,rayon:6,limit:200}),12000);
       if(l&&l.length)all=all.concat(l.map(a=>({type:t,pieces:+a.pieces||0,prix:+a.prix||0,surf:+a.surface||0,date:a.date||a.published_at||""})));
     }
     if(!all.length)return;
@@ -504,18 +507,20 @@ function bucketPieces(arr){
 /* cadastre.com affiche l'Insee au niveau IRIS (le quartier dans le cercle), PAS la commune.
    On localise l'IRIS du point, puis on interroge l'INSEE au maille IRIS. */
 async function findIris(lat,lon){
+  // polygone IRIS contenant le point (intersects) — les champs sont des tableaux en ODS v2.1
   try{
-    const w="within_distance(geo_point_2d, geom'POINT("+lon+" "+lat+")', 120m)";
-    const r=await fetch(IRIS_DS+"?where="+encodeURIComponent(w)+"&limit=1");
+    const w="intersects(geo_shape, geom'POINT("+lon+" "+lat+")')";
+    const r=await tfetch(IRIS_DS+"?where="+encodeURIComponent(w)+"&limit=1",8000);
     const d=await r.json();const f=(d.results||[])[0];if(!f)return null;
-    return {code:f.iris_code||f.code_iris||f.iris||null,name:f.iris_name||f.iris_label||f.nom_iris||f.lib_iris||"",com:f.com_name||f.commune||M.ville};
+    const fst=v=>Array.isArray(v)?v[0]:v;
+    return {code:fst(f.iris_code)||null,name:fst(f.iris_name)||"",com:fst(f.com_name)||M.ville};
   }catch(e){return null;}
 }
 /* appel Mélodi VIA LE PROXY (CORS + jeton serveur). Renvoie le tableau d'observations. */
 function inseeProxyBase(){const b=(window.CT_PROXY_BASE||"").replace(/\/+$/,"");return b?b+"/insee/data/":"";}
 async function melodi(ds,params){
   const base=inseeProxyBase();if(!base)return [];
-  try{const r=await fetch(base+ds+"?"+params,{headers:{Accept:"application/json"}});if(!r.ok)return [];const d=await r.json();return d.observations||d.data||[];}catch(e){return [];}
+  try{const r=await tfetch(base+ds+"?"+params,9000,{headers:{Accept:"application/json"}});if(!r.ok)return [];const d=await r.json();return d.observations||d.data||[];}catch(e){return [];}
 }
 function obsVal(o){const m=o&&o.measures;if(!m)return null;const v=m.OBS_VALUE_NIVEAU||m.OBS_VALUE||m;return +(v&&v.value!=null?v.value:v);}
 async function fetchInsee(){
@@ -526,9 +531,10 @@ async function fetchInsee(){
     types:{maison:null,appart:null,sociaux:null},acces:{loc:null,prop:null},
     revHab:null,revCouple:null,source:"—"};
   const iris=await findIris(lat,lon);
-  if(iris){out.iris=iris.name||iris.code||"";out.irisCode=iris.code||"";if(iris.com)out.ville=iris.com;}
-  const geo=iris&&iris.code?"IRIS-"+iris.code:(M.insee?"COM-"+M.insee:"");
-  out.geo=geo;out.maille=iris&&iris.code?"IRIS":"COM";
+  if(iris){out.iris=iris.name||"";out.irisCode=iris.code||"";if(iris.com)out.ville=iris.com;}
+  // Mélodi ne sert que la maille COMMUNE (GEO=IRIS-… renvoie vide) → on requête la commune ; le nom du quartier reste affiché en contexte.
+  const geo=M.insee?"COM-"+M.insee:"";
+  out.geo=geo;out.maille="COM";
   if(!geo){M.inseeData=out;return;}
   // --- Population (RP) — dataset confirmé : dims GEO/SEX/AGE/TIME_PERIOD, mesure OBS_VALUE_NIVEAU ---
   const pop=await melodi("DS_RP_POPULATION_PRINC","GEO="+encodeURIComponent(geo)+"&RP_MEASURE=POP&SEX=_T");
@@ -706,7 +712,7 @@ function renderAll(){
         +inseeBox("Accès à la propriété",[["Locataire",pct(d.acces.loc)],["Propriétaire",pct(d.acces.prop)]])
         +'</div>';
       inner+='<div class="revban"><span class="lab">Revenu net moyen</span><div class="c"><small>Par habitant</small><b>'+(d.revHab?E0(d.revHab)+" € ":"— ")+'</b><small>/mois</small></div><div class="c"><small>Par couple</small><b>'+(d.revCouple?E0(d.revCouple)+" € ":"— ")+'</b><small>/mois</small></div></div>';
-      inner+='<div class="note">Périmètre : IRIS'+(d.iris?' « '+esc(d.iris)+' »':'')+(d.ville?' · '+esc(d.ville):'')+'. '+(d.habitants==null?'Indicateurs détaillés via l\'API INSEE officielle (renseignez <code>window.INSEE_TOKEN</code> si un jeton est requis).':'Source : '+d.source+'.')+'</div>';
+      inner+='<div class="note">Données : commune de '+esc(d.ville||"—")+(d.iris?' (quartier IRIS « '+esc(d.iris)+' »)':'')+' — source INSEE Mélodi (RP + Filosofi).'+(d.habitants==null?' Renseignez <code>window.INSEE_TOKEN</code> si l\'API exige un jeton.':'')+'</div>';
     }else inner+='<div class="note">Lancez l\'estimation (Infos → adresse) pour charger les données Insee de la commune.</div>';
     html+=page("insee",inner+'</div>');}
   // ---- ANALYSE SECTEUR : BUDGETS ----
