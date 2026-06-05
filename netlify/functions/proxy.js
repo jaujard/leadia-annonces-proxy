@@ -3,6 +3,7 @@
  * Reçoit /api/*  (via redirect netlify.toml) → relaie vers cherchertrouver.immo
  * en ajoutant la clé (secret CT_API_KEY). CORS inclus. Clé jamais exposée au navigateur.
  * Route /db/annonces : lecture seule de la table Supabase leadia_annonces (clé Supabase serveur).
+ * Route /insee : relais API INSEE Mélodi (population/logement/revenus), anonyme ou Bearer INSEE_TOKEN.
  */
 const API_BASE = "https://cherchertrouver.immo/api/v1";
 const ALLOWED = /^(ping|annonces|annonces\/map|annonces\/[^/]+\/[^/]+|ptz\/zone)$/;
@@ -53,6 +54,25 @@ exports.handler = async (event) => {
       return { statusCode: r.status, headers: { ...cors, "Content-Type": "application/json", "Access-Control-Expose-Headers": "Content-Range", ...(cr ? { "Content-Range": cr } : {}) }, body };
     } catch (e) {
       return { statusCode: 502, headers: cors, body: JSON.stringify({ error: "Supabase injoignable", code: "DB_UPSTREAM" }) };
+    }
+  }
+
+  // --- Relais INSEE Mélodi : /api/insee/<chemin melodi>?<query> ---
+  // Données population / logement / revenus. Anonyme (30 req/min) ; ajoute le
+  // Bearer si INSEE_TOKEN est défini (secret serveur). Force le JSON. Cache 24 h.
+  // Résout aussi le CORS (appel serveur -> serveur, pas de restriction navigateur).
+  if (path === "insee" || path.startsWith("insee/")) {
+    const sub = path.replace(/^insee\/?/, "");
+    if (!sub) return { statusCode: 400, headers: cors, body: JSON.stringify({ error: "Chemin Mélodi manquant", code: "INSEE_NO_PATH" }) };
+    const url = "https://api.insee.fr/melodi/" + sub + qs;
+    const h = { "Accept": "application/json" };
+    if (process.env.INSEE_TOKEN) h["Authorization"] = "Bearer " + process.env.INSEE_TOKEN;
+    try {
+      const r = await fetch(url, { headers: h });
+      const body = await r.text();
+      return { statusCode: r.status, headers: { ...cors, "Content-Type": r.headers.get("content-type") || "application/json", "Cache-Control": "public, max-age=86400, s-maxage=86400" }, body };
+    } catch (e) {
+      return { statusCode: 502, headers: cors, body: JSON.stringify({ error: "INSEE injoignable", code: "INSEE_UPSTREAM" }) };
     }
   }
 
