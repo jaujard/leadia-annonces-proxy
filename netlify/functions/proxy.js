@@ -3,7 +3,8 @@
  * Reçoit /api/*  (via redirect netlify.toml) → relaie vers cherchertrouver.immo
  * en ajoutant la clé (secret CT_API_KEY). CORS inclus. Clé jamais exposée au navigateur.
  * Route /db/annonces : lecture seule de la table Supabase leadia_annonces (clé Supabase serveur).
- * Route /insee : relais API INSEE Mélodi (population/logement/revenus), anonyme ou Bearer INSEE_TOKEN.
+ * Route /db/carreau  : lecture seule de la table Supabase leadia_carreau (Insee carreaux 200m).
+ * Route /insee       : relais API INSEE Mélodi (population/logement/revenus), anonyme ou Bearer INSEE_TOKEN.
  */
 const API_BASE = "https://cherchertrouver.immo/api/v1";
 const ALLOWED = /^(ping|annonces|annonces\/map|annonces\/[^/]+\/[^/]+|ptz\/zone)$/;
@@ -23,8 +24,6 @@ exports.handler = async (event) => {
   const qs = event.rawQuery ? "?" + event.rawQuery : "";
 
   // --- Relais image : /api/img?u=<url> ---
-  // Fetch côté serveur SANS Referer navigateur -> contourne l'anti-hotlink
-  // (bienici/seloger renvoient un placeholder noir sinon). Cache edge 24h.
   if (path === "img") {
     const u = (event.queryStringParameters && event.queryStringParameters.u) || "";
     if (!/^https?:\/\//i.test(u)) return { statusCode: 400, headers: cors, body: JSON.stringify({ error: "Paramètre u invalide", code: "IMG_BAD_URL" }) };
@@ -39,9 +38,7 @@ exports.handler = async (event) => {
     }
   }
 
-  // --- Lecture Supabase : /api/db/annonces?<filtres PostgREST> ---
-  // Relaie une requête LECTURE SEULE vers PostgREST (table verrouillée leadia_annonces).
-  // La clé Supabase reste côté serveur (secret SUPABASE_KEY). GET uniquement (déjà imposé).
+  // --- Lecture Supabase : /api/db/annonces?<filtres PostgREST> (table verrouillée, GET only) ---
   if (path === "db/annonces") {
     const SB_URL = process.env.SUPABASE_URL, SB_KEY = process.env.SUPABASE_KEY;
     if (!SB_URL || !SB_KEY) return { statusCode: 500, headers: cors, body: JSON.stringify({ error: "SUPABASE_URL / SUPABASE_KEY non configurées", code: "DB_NO_KEY" }) };
@@ -57,10 +54,22 @@ exports.handler = async (event) => {
     }
   }
 
+  // --- Lecture Supabase : /api/db/carreau?<filtres PostgREST> (carreaux INSEE 200m, GET only) ---
+  if (path === "db/carreau") {
+    const SB_URL = process.env.SUPABASE_URL, SB_KEY = process.env.SUPABASE_KEY;
+    if (!SB_URL || !SB_KEY) return { statusCode: 500, headers: cors, body: JSON.stringify({ error: "SUPABASE_URL / SUPABASE_KEY non configurées", code: "DB_NO_KEY" }) };
+    try {
+      const r = await fetch(SB_URL.replace(/\/$/, "") + "/rest/v1/leadia_carreau" + qs, {
+        headers: { apikey: SB_KEY, Authorization: "Bearer " + SB_KEY, Accept: "application/json" }
+      });
+      const body = await r.text();
+      return { statusCode: r.status, headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "public, max-age=86400, s-maxage=86400" }, body };
+    } catch (e) {
+      return { statusCode: 502, headers: cors, body: JSON.stringify({ error: "Supabase injoignable", code: "DB_UPSTREAM" }) };
+    }
+  }
+
   // --- Relais INSEE Mélodi : /api/insee/<chemin melodi>?<query> ---
-  // Données population / logement / revenus. Anonyme (30 req/min) ; ajoute le
-  // Bearer si INSEE_TOKEN est défini (secret serveur). Force le JSON. Cache 24 h.
-  // Résout aussi le CORS (appel serveur -> serveur, pas de restriction navigateur).
   if (path === "insee" || path.startsWith("insee/")) {
     const sub = path.replace(/^insee\/?/, "");
     if (!sub) return { statusCode: 400, headers: cors, body: JSON.stringify({ error: "Chemin Mélodi manquant", code: "INSEE_NO_PATH" }) };
