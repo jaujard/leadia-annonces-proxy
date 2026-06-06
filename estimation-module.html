@@ -217,6 +217,7 @@
   .modal .mprev .a4{width:520px;min-height:auto;transform-origin:top center}
   .spin{display:inline-block;width:13px;height:13px;border:2px solid #ffffff66;border-top-color:#fff;border-radius:50%;animation:r .7s linear infinite;vertical-align:-2px;margin-right:7px}@keyframes r{to{transform:rotate(360deg)}}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
 </head>
 <body>
 <div class="top"><span class="t">📄 Estimation — Avis de valeur</span><a href="./menu-cadastre.html">← Menu</a></div>
@@ -518,6 +519,33 @@ async function findIris(lat,lon){
 }
 /* appel Mélodi VIA LE PROXY (CORS + jeton serveur). Renvoie le tableau d'observations. */
 function inseeProxyBase(){const b=(window.CT_PROXY_BASE||"").replace(/\/+$/,"");return b?b+"/insee/data/":"";}
+/* --- CARREAU INSEE 200m (Filosofi) : source hyper-locale de cadastre.com (somme rayon ~220m) --- */
+const CARREAU_RAYON=220;
+const EPSG3035="+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs";
+function dbCarreauBase(){var b=(window.CT_PROXY_BASE||"");if(b.charAt(b.length-1)==="/")b=b.slice(0,-1);return b?b+"/db/carreau":"";}
+function carreauCells(lat,lon){var p=proj4(EPSG3035,[lon,lat]),x=p[0],y=p[1];var E0=Math.floor(x/200)*200,N0=Math.floor(y/200)*200;var cells=[];for(var dN=-2;dN<=2;dN++)for(var dE=-2;dE<=2;dE++){var E=E0+dE*200,N=N0+dN*200;cells.push({id:"CRS3035RES200mN"+N+"E"+E,cx:E+100,cy:N+100});}return {x:x,y:y,cells:cells};}
+async function fetchCarreau(lat,lon,out){try{
+  if(typeof proj4==="undefined")return false;
+  var base=dbCarreauBase();if(!base)return false;
+  var g=carreauCells(lat,lon);var ids=g.cells.map(function(c){return c.id;});
+  var cols="idcar_200m,ind,men,men_mais,men_coll,men_pauv,men_prop,log_soc,log_av45,log_45_70,log_70_90,log_ap90,ind_snv,ind_0_3,ind_4_5,ind_6_10,ind_11_17,ind_18_24,ind_25_39,ind_40_54,ind_55_64,ind_65_79,ind_80p";
+  var r=await tfetch(base+"?idcar_200m=in.("+ids.join(",")+")&select="+cols,9000,{headers:{Accept:"application/json"}});
+  if(!r.ok)return false;var rows=await r.json();if(!rows||!rows.length)return false;
+  var byId={};g.cells.forEach(function(c){byId[c.id]=c;});var R2=CARREAU_RAYON*CARREAU_RAYON;
+  var kept=rows.filter(function(o){var c=byId[o.idcar_200m];if(!c)return false;var dx=c.cx-g.x,dy=c.cy-g.y;return dx*dx+dy*dy<=R2;});
+  if(!kept.length)return false;
+  var S=function(k){return kept.reduce(function(a,o){return a+(+o[k]||0);},0);};
+  var ind=S("ind"),men=S("men");if(!ind&&!men)return false;
+  var totLog=S("log_av45")+S("log_45_70")+S("log_70_90")+S("log_ap90");
+  var mm=S("men_mais"),mc=S("men_coll"),typDen=Math.max(1,mm+mc);var pr=function(v){return Math.round(v);};
+  out.maille="CARREAU";out.nCarreaux=kept.length;
+  out.habitants=Math.round(ind);out.menages=Math.round(men);out.logements=Math.round(totLog||men);
+  if(totLog>0){out.constr.a45=pr(S("log_av45")/totLog*100);out.constr.b4570=pr(S("log_45_70")/totLog*100);out.constr.c7090=pr(S("log_70_90")/totLog*100);out.constr.d90=pr(S("log_ap90")/totLog*100);out.types.sociaux=pr(S("log_soc")/totLog*100);}
+  out.types.maison=pr(mm/typDen*100);out.types.appart=pr(mc/typDen*100);
+  if(men>0){out.acces.prop=pr(S("men_prop")/men*100);out.acces.loc=Math.max(0,100-out.acces.prop);out.menModeste=pr(S("men_pauv")/men*100);}
+  if(ind>0){var j=S("ind_0_3")+S("ind_4_5")+S("ind_6_10")+S("ind_11_17")+S("ind_18_24");var m=S("ind_25_39")+S("ind_40_54")+S("ind_55_64");var v=S("ind_65_79")+S("ind_80p");out.age.j=pr(j/ind*100);out.age.m=pr(m/ind*100);out.age.v=pr(v/ind*100);var snv=S("ind_snv");if(snv>0){out.revHab=Math.round(snv/ind/12);out.revCouple=Math.round(out.revHab*2);}}
+  out.source="INSEE Filosofi 200m (rayon "+CARREAU_RAYON+"m, "+kept.length+" carreaux)";
+  return true;}catch(e){return false;}}
 async function melodi(ds,params){
   const base=inseeProxyBase();if(!base)return [];
   try{const r=await tfetch(base+ds+"?"+params,9000,{headers:{Accept:"application/json"}});if(!r.ok)return [];const d=await r.json();return d.observations||d.data||[];}catch(e){return [];}
@@ -532,6 +560,8 @@ async function fetchInsee(){
     revHab:null,revCouple:null,source:"—"};
   const iris=await findIris(lat,lon);
   if(iris){out.iris=iris.name||"";out.irisCode=iris.code||"";if(iris.com)out.ville=iris.com;}
+  // --- CARREAU INSEE 200m (somme rayon 220m) — PRIORITAIRE (colle a cadastre.com) ---
+  if(await fetchCarreau(lat,lon,out)){ M.inseeData=out; return; }
   // Mélodi ne sert que la maille COMMUNE (GEO=IRIS-… renvoie vide) → on requête la commune ; le nom du quartier reste affiché en contexte.
   const geo=M.insee?"COM-"+M.insee:"";
   out.geo=geo;out.maille="COM";
