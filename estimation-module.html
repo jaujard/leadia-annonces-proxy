@@ -653,9 +653,13 @@ async function fetchPOI(lat,lon){
 }
 
 /* ===================== APERÇU (pages A4) ===================== */
-/* bbox calé sur le ratio w/h de l'image + correction longitude cos(lat) → carte non déformée (sinon zone carrée étirée dans un cadre non carré) */
-function orthoImg(w,h,z){const dLat=z||0.0024;const dLon=dLat*(w/h)/Math.cos((M.lat||47)*Math.PI/180);const bb=(M.lon-dLon)+","+(M.lat-dLat)+","+(M.lon+dLon)+","+(M.lat+dLat);return "https://data.geopf.fr/wms-r/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=HR.ORTHOIMAGERY.ORTHOPHOTOS&CRS=CRS:84&BBOX="+bb+"&WIDTH="+w+"&HEIGHT="+h+"&FORMAT=image/jpeg&STYLES=";}
-function planImg(w,h,z){const dLat=z||0.004;const dLon=dLat*(w/h)/Math.cos((M.lat||47)*Math.PI/180);const bb=(M.lon-dLon)+","+(M.lat-dLat)+","+(M.lon+dLon)+","+(M.lat+dLat);return "https://data.geopf.fr/wms-r/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&CRS=CRS:84&BBOX="+bb+"&WIDTH="+w+"&HEIGHT="+h+"&FORMAT=image/jpeg&STYLES=";}
+/* Cartes : satellite/plan Mapbox via le proxy /sat (token serveur, jamais en clair), bbox calé sur le ratio w/h + correction cos(lat). Repli IGN (geopf) si le proxy n'est pas configuré. */
+function satBbox(w,h,z){const dLat=z||0.0024;const dLon=dLat*(w/h)/Math.cos((M.lat||47)*Math.PI/180);return (M.lon-dLon)+","+(M.lat-dLat)+","+(M.lon+dLon)+","+(M.lat+dLat);}
+function satImg(w,h,z,style,ignLayer){const bb=satBbox(w,h,z);
+  if(window.CT_PROXY_BASE)return window.CT_PROXY_BASE+"/sat?bbox="+bb+"&w="+w+"&h="+h+"&style="+(style||"satellite-v9");
+  return "https://data.geopf.fr/wms-r/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS="+(ignLayer||"HR.ORTHOIMAGERY.ORTHOPHOTOS")+"&CRS=CRS:84&BBOX="+bb+"&WIDTH="+w+"&HEIGHT="+h+"&FORMAT=image/jpeg&STYLES=";}
+function orthoImg(w,h,z){return satImg(w,h,z,"satellite-v9","HR.ORTHOIMAGERY.ORTHOPHOTOS");}
+function planImg(w,h,z){return satImg(w,h,z||0.004,"streets-v12","GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2");}
 /* mini-carte cadastre recentrée sur la parcelle + contour vert (comme cadastre.com) ; repli orthoImg si pas de géométrie */
 function cadMiniHTML(w,h){
   if(!(M.parcelGeom&&M.parcelGeom.length))return '<div class="miniMap"'+(M.lat?' style="background-image:url(\''+orthoImg(w,h,0.0011)+'\')"':'')+'><span class="pin">📍</span></div>';
@@ -664,7 +668,8 @@ function cadMiniHTML(w,h){
   const cLat=(mnLat+mxLat)/2,cLon=(mnLon+mxLon)/2,cl=Math.cos(cLat*Math.PI/180);
   let dLat=Math.max((mxLat-mnLat)/2,(mxLon-mnLon)/2*cl*h/w)*1.7;if(dLat<0.0004)dLat=0.0004;
   const dLon=dLat*(w/h)/cl;
-  const bg="https://data.geopf.fr/wms-r/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=HR.ORTHOIMAGERY.ORTHOPHOTOS&CRS=CRS:84&BBOX="+(cLon-dLon)+","+(cLat-dLat)+","+(cLon+dLon)+","+(cLat+dLat)+"&WIDTH="+w+"&HEIGHT="+h+"&FORMAT=image/jpeg&STYLES=";
+  const _bb=(cLon-dLon)+","+(cLat-dLat)+","+(cLon+dLon)+","+(cLat+dLat);
+  const bg=window.CT_PROXY_BASE?window.CT_PROXY_BASE+"/sat?bbox="+_bb+"&w="+w+"&h="+h+"&style=satellite-v9":"https://data.geopf.fr/wms-r/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=HR.ORTHOIMAGERY.ORTHOPHOTOS&CRS=CRS:84&BBOX="+_bb+"&WIDTH="+w+"&HEIGHT="+h+"&FORMAT=image/jpeg&STYLES=";
   const proj=p=>((p[0]-(cLon-dLon))/(2*dLon)*w).toFixed(1)+","+((1-(p[1]-(cLat-dLat))/(2*dLat))*h).toFixed(1);
   const polys=rg.map(r=>'<polygon points="'+r.map(proj).join(" ")+'" fill="#22c55e40" stroke="#16a34a" stroke-width="2.4"/>').join("");
   return '<div class="miniMap" style="position:relative;background-image:url(\''+bg+'\')"><svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="xMidYMid slice" style="position:absolute;inset:0;width:100%;height:100%">'+polys+'</svg></div>';
