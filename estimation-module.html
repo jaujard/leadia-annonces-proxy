@@ -648,8 +648,9 @@ async function fetchPOI(lat,lon){
 }
 
 /* ===================== APERÇU (pages A4) ===================== */
-function orthoImg(w,h,z){const d=z||0.0024;const bb=(M.lon-d)+","+(M.lat-d)+","+(M.lon+d)+","+(M.lat+d);return "https://data.geopf.fr/wms-r/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=HR.ORTHOIMAGERY.ORTHOPHOTOS&CRS=CRS:84&BBOX="+bb+"&WIDTH="+w+"&HEIGHT="+h+"&FORMAT=image/jpeg&STYLES=";}
-function planImg(w,h,z){const d=z||0.004;const bb=(M.lon-d)+","+(M.lat-d)+","+(M.lon+d)+","+(M.lat+d);return "https://data.geopf.fr/wms-r/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&CRS=CRS:84&BBOX="+bb+"&WIDTH="+w+"&HEIGHT="+h+"&FORMAT=image/jpeg&STYLES=";}
+/* bbox calé sur le ratio w/h de l'image + correction longitude cos(lat) → carte non déformée (sinon zone carrée étirée dans un cadre non carré) */
+function orthoImg(w,h,z){const dLat=z||0.0024;const dLon=dLat*(w/h)/Math.cos((M.lat||47)*Math.PI/180);const bb=(M.lon-dLon)+","+(M.lat-dLat)+","+(M.lon+dLon)+","+(M.lat+dLat);return "https://data.geopf.fr/wms-r/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=HR.ORTHOIMAGERY.ORTHOPHOTOS&CRS=CRS:84&BBOX="+bb+"&WIDTH="+w+"&HEIGHT="+h+"&FORMAT=image/jpeg&STYLES=";}
+function planImg(w,h,z){const dLat=z||0.004;const dLon=dLat*(w/h)/Math.cos((M.lat||47)*Math.PI/180);const bb=(M.lon-dLon)+","+(M.lat-dLat)+","+(M.lon+dLon)+","+(M.lat+dLat);return "https://data.geopf.fr/wms-r/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&CRS=CRS:84&BBOX="+bb+"&WIDTH="+w+"&HEIGHT="+h+"&FORMAT=image/jpeg&STYLES=";}
 function pfoot(){return '<div class="pfoot"><div class="ag"><span class="a" style="'+(M.agPhoto?"background-image:url(\'"+M.agPhoto+"\')":"")+'"></span><span>'+M.agName+'</span></div><span>'+M.agTel+' · '+M.agMail+'</span></div>';}
 function pctl(){return '<div class="pctl"><button title="Aperçu">👁</button><button title="Modifier">✏️</button></div>';}
 function phead(k,title){const g=PAGE_GROUP[k];const it=findItem(k);return '<div class="phead"><div class="pill"><span class="pic">'+GROUP_PILL[g]+'</span>'+g+'</div><div class="ttl">'+title+'</div><div class="rdot">'+(it?it.ic:"📄")+'</div></div>';}
