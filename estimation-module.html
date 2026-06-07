@@ -346,7 +346,7 @@ const SVC={
 const SECTIONS=[
  {grp:"Présentation du bien", ic:"🏠", items:[
    {k:"infos",n:"Infos",ic:"👤",edit:1},
-   {k:"localisation",n:"Localisation",ic:"📍"},
+   {k:"localisation",n:"Localisation",ic:"📍",edit:1},
    {k:"description",n:"Description",ic:"▦",edit:1},
    {k:"photos",n:"Photos",ic:"📷",edit:1},
    {k:"interets",n:"Intérêts",ic:"📌"},
@@ -468,11 +468,16 @@ async function analyse(){
   const annAll=await fetchAnnoncesComparables(lat,lon,M.type);
   M.allAnnonces=annAll.map(a=>+a.prix).filter(p=>p>0).sort((x,y)=>x-y);
   M.annonces=annAll.slice(0,6).map(a=>({adr:a.adresse||a.ville||"",ville:a.ville||"",type:a.type,surf:a.surface,pieces:a.pieces,terrain:a.terrain,prix:a.prix,m2:Math.round(a.prix/a.surface),photos:(Array.isArray(a.photos)?a.photos:typeof a.photos==="string"?[a.photos]:Array.isArray(a.images)?a.images:[]).slice(0,2),date:a.date||""}));
-  // 5) cadastre
+  // 5) cadastre — LA parcelle contenant le point (+ géométrie pour le contour vert), comme cadastre.com
   try{
-    const dd=0.0004,bb=(lat-dd)+","+(lon-dd)+","+(lat+dd)+","+(lon+dd);
-    const r=await tfetch(WFS+"?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=CADASTRALPARCELS.PARCELLAIRE_EXPRESS:parcelle&SRSNAME=CRS:84&OUTPUTFORMAT=application/json&COUNT=6&BBOX="+bb,10000);
-    const d2=await r.json();M.cadastre=(d2.features||[]).map(f=>({insee:f.properties.code_insee,section:f.properties.section,numero:f.properties.numero,sup:f.properties.contenance})).slice(0,4);
+    const dd=0.0008,bb=(lat-dd)+","+(lon-dd)+","+(lat+dd)+","+(lon+dd);
+    const r=await tfetch(WFS+"?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=CADASTRALPARCELS.PARCELLAIRE_EXPRESS:parcelle&SRSNAME=CRS:84&OUTPUTFORMAT=application/json&COUNT=80&BBOX="+bb,10000);
+    const fs=(await r.json()).features||[];
+    const ringsOf=g=>g?(g.type==="MultiPolygon"?g.coordinates.map(p=>p[0]):[g.coordinates[0]]):[];
+    const inRing=(pt,rr)=>{let c=false;for(let i=0,j=rr.length-1;i<rr.length;j=i++){const xi=rr[i][0],yi=rr[i][1],xj=rr[j][0],yj=rr[j][1];if(((yi>pt[1])!=(yj>pt[1]))&&(pt[0]<(xj-xi)*(pt[1]-yi)/(yj-yi)+xi))c=!c;}return c;};
+    const feat=fs.find(f=>ringsOf(f.geometry).some(rr=>inRing([lon,lat],rr)));
+    if(feat){M.cadastre=[{insee:feat.properties.code_insee,section:feat.properties.section,numero:feat.properties.numero,sup:feat.properties.contenance}];M.parcelGeom=ringsOf(feat.geometry);}
+    else{M.cadastre=fs.slice(0,4).map(f=>({insee:f.properties.code_insee,section:f.properties.section,numero:f.properties.numero,sup:f.properties.contenance}));M.parcelGeom=null;}
   }catch(e){}
   // 6) POI (OSM Overpass)
   await fetchPOI(lat,lon);
@@ -651,6 +656,19 @@ async function fetchPOI(lat,lon){
 /* bbox calé sur le ratio w/h de l'image + correction longitude cos(lat) → carte non déformée (sinon zone carrée étirée dans un cadre non carré) */
 function orthoImg(w,h,z){const dLat=z||0.0024;const dLon=dLat*(w/h)/Math.cos((M.lat||47)*Math.PI/180);const bb=(M.lon-dLon)+","+(M.lat-dLat)+","+(M.lon+dLon)+","+(M.lat+dLat);return "https://data.geopf.fr/wms-r/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=HR.ORTHOIMAGERY.ORTHOPHOTOS&CRS=CRS:84&BBOX="+bb+"&WIDTH="+w+"&HEIGHT="+h+"&FORMAT=image/jpeg&STYLES=";}
 function planImg(w,h,z){const dLat=z||0.004;const dLon=dLat*(w/h)/Math.cos((M.lat||47)*Math.PI/180);const bb=(M.lon-dLon)+","+(M.lat-dLat)+","+(M.lon+dLon)+","+(M.lat+dLat);return "https://data.geopf.fr/wms-r/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&CRS=CRS:84&BBOX="+bb+"&WIDTH="+w+"&HEIGHT="+h+"&FORMAT=image/jpeg&STYLES=";}
+/* mini-carte cadastre recentrée sur la parcelle + contour vert (comme cadastre.com) ; repli orthoImg si pas de géométrie */
+function cadMiniHTML(w,h){
+  if(!(M.parcelGeom&&M.parcelGeom.length))return '<div class="miniMap"'+(M.lat?' style="background-image:url(\''+orthoImg(w,h,0.0011)+'\')"':'')+'><span class="pin">📍</span></div>';
+  const rg=M.parcelGeom;let mnLon=1e9,mxLon=-1e9,mnLat=1e9,mxLat=-1e9;
+  rg.forEach(r=>r.forEach(p=>{mnLon=Math.min(mnLon,p[0]);mxLon=Math.max(mxLon,p[0]);mnLat=Math.min(mnLat,p[1]);mxLat=Math.max(mxLat,p[1]);}));
+  const cLat=(mnLat+mxLat)/2,cLon=(mnLon+mxLon)/2,cl=Math.cos(cLat*Math.PI/180);
+  let dLat=Math.max((mxLat-mnLat)/2,(mxLon-mnLon)/2*cl*h/w)*1.7;if(dLat<0.0004)dLat=0.0004;
+  const dLon=dLat*(w/h)/cl;
+  const bg="https://data.geopf.fr/wms-r/wms?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=HR.ORTHOIMAGERY.ORTHOPHOTOS&CRS=CRS:84&BBOX="+(cLon-dLon)+","+(cLat-dLat)+","+(cLon+dLon)+","+(cLat+dLat)+"&WIDTH="+w+"&HEIGHT="+h+"&FORMAT=image/jpeg&STYLES=";
+  const proj=p=>((p[0]-(cLon-dLon))/(2*dLon)*w).toFixed(1)+","+((1-(p[1]-(cLat-dLat))/(2*dLat))*h).toFixed(1);
+  const polys=rg.map(r=>'<polygon points="'+r.map(proj).join(" ")+'" fill="#22c55e40" stroke="#16a34a" stroke-width="2.4"/>').join("");
+  return '<div class="miniMap" style="position:relative;background-image:url(\''+bg+'\')"><svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="xMidYMid slice" style="position:absolute;inset:0;width:100%;height:100%">'+polys+'</svg></div>';
+}
 function pfoot(){return '<div class="pfoot"><div class="ag"><span class="a" style="'+(M.agPhoto?"background-image:url(\'"+M.agPhoto+"\')":"")+'"></span><span>'+M.agName+'</span></div><span>'+M.agTel+' · '+M.agMail+'</span></div>';}
 function pctl(){return '<div class="pctl"><button title="Aperçu">👁</button><button title="Modifier">✏️</button></div>';}
 function phead(k,title){const g=PAGE_GROUP[k];const it=findItem(k);return '<div class="phead"><div class="pill"><span class="pic">'+GROUP_PILL[g]+'</span>'+g+'</div><div class="ttl">'+title+'</div><div class="rdot">'+(it?it.ic:"📄")+'</div></div>';}
@@ -720,11 +738,11 @@ function renderAll(){
   html+='<div class="a4" id="pg-infos"><div class="pbody">'
    +'<div class="band"><div><h1>'+(M.titre||"AVIS DE VALEUR").toUpperCase()+'</h1><div class="d">'+(M.demande?"À la demande de "+M.demande+"<br>":"")+'Établi le '+M.date+(M.statut?' · '+M.statut:'')+'</div></div><div class="logo">🏠</div></div>'
    +'<div class="agent"><div class="av" style="'+(M.agPhoto?"background-image:url(\'"+M.agPhoto+"\')":"")+'">'+(M.agPhoto?"":"👤")+'</div><div><div class="nm">'+M.agName+'</div><div class="ct">📞 '+M.agTel+'<br>✉ '+M.agMail+'<br>🏢 '+M.agAgence+'</div></div><div class="badges"><div class="badge"><b>'+(M.surface||"—")+'</b>m²</div><div class="badge"><b>'+(M.pieces||"—")+'</b>pièces</div>'+(M.terrain?'<div class="badge"><b>'+M.terrain+'</b>m²</div>':'')+'</div></div>'
-   +'<div class="coverMap"'+(M.lat?' style="background-image:url(\''+orthoImg(660,340)+'\')"':'')+'><span class="tag">Satellite</span>'+(M.lat?'<span class="pin">📍</span>':'<span style="color:#9aa">📍 Renseignez l\'adresse (Infos)</span>')+'</div>'
+   +'<div class="coverMap" style="height:540px'+(M.lat?';background-image:url(\''+orthoImg(700,540)+'\')':'')+'"><span class="tag">Satellite</span>'+(M.lat?'<span class="pin">📍</span>':'<span style="color:#9aa">📍 Renseignez l\'adresse (Infos)</span>')+'</div>'
    +'<div class="addr">'+(M.adresse||"—")+'</div>'
    +'</div>'+pctl()+pfoot()+'</div>';
   // ---- LOCALISATION ----
-  if(vis.localisation){let cad="";if(M.cadastre.length){cad='<h2>Informations cadastrales</h2><div class="two"><div class="miniMap"'+(M.lat?' style="background-image:url(\''+orthoImg(320,215,0.0011)+'\')"':'')+'><span class="pin">📍</span></div><div><table><thead><tr><th>Insee</th><th>Sect.</th><th>N°</th><th>Surface</th></tr></thead><tbody>'+M.cadastre.map(c=>'<tr><td>'+c.insee+'</td><td>'+c.section+'</td><td>'+c.numero+'</td><td>'+c.sup+' m²</td></tr>').join("")+'</tbody></table><div class="tot"><span>Superficie totale</span><span>'+M.cadastre.reduce((s,c)=>s+(+c.sup||0),0)+' m²</span></div></div></div>';}
+  if(vis.localisation){let cad="";if(M.cadastre.length){cad='<h2>Informations cadastrales</h2><div class="two">'+cadMiniHTML(320,215)+'<div><table><thead><tr><th>Insee</th><th>Sect.</th><th>N°</th><th>Surface</th></tr></thead><tbody>'+M.cadastre.map(c=>'<tr><td>'+c.insee+'</td><td>'+c.section+'</td><td>'+c.numero+'</td><td>'+c.sup+' m²</td></tr>').join("")+'</tbody></table><div class="tot"><span>Superficie totale</span><span>'+M.cadastre.reduce((s,c)=>s+(+c.sup||0),0)+' m²</span></div></div></div>';}
     html+=page("localisation",phead("localisation","Localisation")+'<div class="sec"><div class="addrline">'+(M.adresse||"—")+'</div><div class="two"><div><div class="colcap">Plan</div><div class="miniMap"'+(M.lat?' style="background-image:url(\''+planImg(320,215)+'\')"':'')+'><span class="pin">📍</span></div></div><div><div class="colcap">Vue aérienne</div><div class="miniMap"'+(M.lat?' style="background-image:url(\''+orthoImg(320,215)+'\')"':'')+'><span class="pin">📍</span></div></div></div>'+cad+'</div>');}
   // ---- DESCRIPTION ----
   if(vis.description){
@@ -891,8 +909,22 @@ function pickPhoto(i){const inp=document.createElement("input");inp.type="file";
 /* ===================== ÉDITEURS / MODAL INFOS ===================== */
 function esc(s){return (s==null?"":(""+s)).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;");}
 function gv(id){const e=$(id);return e?e.value:"";}
+function openLoc(){
+  $("mTitle").textContent="Localisation";$("mPrev").style.display="none";
+  const f=$("mForm");f.style.width="520px";
+  f.innerHTML='<h3>Localisation</h3><label class="fl">Adresse du bien</label><input class="fi" id="m_locadr" value="'+esc(M.adresse||"")+'"><div class="note" style="color:#777">Modifiez l\'adresse puis Valider : re-géocodage (BAN) + recalcul de la parcelle, de l\'Insee et du secteur.</div>';
+  $("modal").classList.add("show");
+  $("mValider").onclick=async()=>{
+    const q=gv("m_locadr").trim();if(!q){$("modal").classList.remove("show");return;}
+    const btn=$("mValider");btn.disabled=true;btn.innerHTML='<span class="spin"></span>Analyse…';
+    try{const d=await (await fetch(BAN+"?q="+encodeURIComponent(q)+"&limit=1")).json();const ft=(d.features||[])[0];
+      if(ft){M.adresse=ft.properties.label;M.lat=ft.geometry.coordinates[1];M.lon=ft.geometry.coordinates[0];M.ville=ft.properties.city||"";M.cp=ft.properties.postcode||"";M.insee=ft.properties.citycode||"";await analyse();}}catch(e){}
+    btn.disabled=false;btn.textContent="Valider";$("modal").classList.remove("show");renderAll();
+  };
+}
 function openEditor(k){
   if(k==="infos")return openInfos();
+  if(k==="localisation")return openLoc();
   // éditeurs texte simples → réutilise le modal en mode simple (colonne form seule)
   $("mTitle").textContent=findItem(k).n;$("mPrev").style.display="none";
   const f=$("mForm");let h="";
