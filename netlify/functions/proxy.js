@@ -1,10 +1,11 @@
 /**
  * Proxy « annonces » — Netlify Function
- * Reçoit /api/*  (via redirect netlify.toml) → relaie vers cherchertrouver.immo
+ * Reçoit /api/* (via redirect netlify.toml) → relaie vers cherchertrouver.immo
  * en ajoutant la clé (secret CT_API_KEY). CORS inclus. Clé jamais exposée au navigateur.
  * Route /db/annonces : lecture seule de la table Supabase leadia_annonces (clé Supabase serveur).
- * Route /db/carreau  : lecture seule de la table Supabase leadia_carreau (Insee carreaux 200m).
- * Route /insee       : relais API INSEE Mélodi (population/logement/revenus), anonyme ou Bearer INSEE_TOKEN.
+ * Route /db/carreau : lecture seule de la table Supabase leadia_carreau (Insee carreaux 200m).
+ * Route /insee : relais API INSEE Mélodi (population/logement/revenus), anonyme ou Bearer INSEE_TOKEN.
+ * Route /sat : relais image satellite/plan Mapbox Static (token MAPBOX_TOKEN serveur, jamais exposé).
  */
 const API_BASE = "https://cherchertrouver.immo/api/v1";
 const ALLOWED = /^(ping|annonces|annonces\/map|annonces\/[^/]+\/[^/]+|ptz\/zone)$/;
@@ -35,6 +36,28 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers: { ...cors, "Content-Type": ct, "Cache-Control": "public, max-age=86400, s-maxage=86400" }, body: buf.toString("base64"), isBase64Encoded: true };
     } catch (e) {
       return { statusCode: 502, headers: cors, body: JSON.stringify({ error: "Image injoignable", code: "IMG_FETCH" }) };
+    }
+  }
+
+  // --- Relais satellite/plan Mapbox Static : /api/sat?bbox=minLon,minLat,maxLon,maxLat&w=&h=&style= ---
+  if (path === "sat") {
+    const TK = process.env.MAPBOX_TOKEN;
+    if (!TK) return { statusCode: 500, headers: cors, body: JSON.stringify({ error: "MAPBOX_TOKEN non configurée", code: "SAT_NO_KEY" }) };
+    const p = event.queryStringParameters || {};
+    const bbox = p.bbox || "";
+    const w = Math.min(1280, Math.max(1, parseInt(p.w, 10) || 600));
+    const h = Math.min(1280, Math.max(1, parseInt(p.h, 10) || 400));
+    const style = /^[a-z0-9-]+$/i.test(p.style || "") ? p.style : "satellite-v9";
+    if (!/^-?\d+(\.\d+)?,-?\d+(\.\d+)?,-?\d+(\.\d+)?,-?\d+(\.\d+)?$/.test(bbox)) return { statusCode: 400, headers: cors, body: JSON.stringify({ error: "bbox invalide", code: "SAT_BAD_BBOX" }) };
+    const url = "https://api.mapbox.com/styles/v1/mapbox/" + style + "/static/[" + bbox + "]/" + w + "x" + h + "@2x?access_token=" + encodeURIComponent(TK) + "&attribution=false&logo=false&padding=0";
+    try {
+      const ri = await fetch(url, { headers: { "Accept": "image/*,*/*" } });
+      if (!ri.ok) return { statusCode: ri.status, headers: cors, body: JSON.stringify({ error: "Mapbox " + ri.status, code: "SAT_UPSTREAM" }) };
+      const ct = ri.headers.get("content-type") || "image/png";
+      const buf = Buffer.from(await ri.arrayBuffer());
+      return { statusCode: 200, headers: { ...cors, "Content-Type": ct, "Cache-Control": "public, max-age=86400, s-maxage=86400" }, body: buf.toString("base64"), isBase64Encoded: true };
+    } catch (e) {
+      return { statusCode: 502, headers: cors, body: JSON.stringify({ error: "Mapbox injoignable", code: "SAT_FETCH" }) };
     }
   }
 
