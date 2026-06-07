@@ -1009,13 +1009,21 @@ async function exportPDF(){
   const prev=$("preview");const pages=[...prev.querySelectorAll(".a4")];
   if(!pages.length){alert("Rien à exporter.");return;}
   const btn=$("dlBtn"),oldTxt=btn?btn.textContent:"";if(btn){btn.disabled=true;btn.textContent="Génération…";}
-  // 1) Neutraliser le CORS : convertir les cartes (background-image cross-origin) en dataURL avant capture
-  const bgCache={},saved=[];
+  // 1) Neutraliser le CORS + recadrer en "cover" au ratio du bloc (html2canvas étire sinon les bg à 100%×100%)
+  const fetchCache={},saved=[];
+  const coverCrop=(dataUrl,boxW,boxH)=>new Promise(res=>{const im=new Image();
+    im.onload=()=>{const S=2,cw=Math.max(1,Math.round(boxW*S)),ch=Math.max(1,Math.round(boxH*S));
+      const c=document.createElement("canvas");c.width=cw;c.height=ch;const x=c.getContext("2d");
+      const ir=im.width/im.height,br=cw/ch;let sw,sh,sx,sy;
+      if(ir>br){sh=im.height;sw=im.height*br;sx=(im.width-sw)/2;sy=0;}else{sw=im.width;sh=im.width/br;sx=0;sy=(im.height-sh)/2;}
+      x.drawImage(im,sx,sy,sw,sh,0,0,cw,ch);res(c.toDataURL("image/jpeg",0.92));};
+    im.onerror=()=>res(dataUrl);im.src=dataUrl;});
   for(const el of [...prev.querySelectorAll('[style*="background-image"]')]){
     const m=/url\(["']?(https?:[^"')]+)["']?\)/.exec(el.style.backgroundImage);if(!m)continue;
-    const url=m[1];if(!(url in bgCache))bgCache[url]=await imgToData(url);
+    const url=m[1];if(!(url in fetchCache))fetchCache[url]=await imgToData(url);
     saved.push([el,el.getAttribute("style")]);
-    if(bgCache[url])el.style.backgroundImage="url('"+bgCache[url]+"')";
+    if(fetchCache[url]){const r=el.getBoundingClientRect();const cr=await coverCrop(fetchCache[url],r.width,r.height);
+      el.style.backgroundImage="url('"+cr+"')";el.style.backgroundSize="100% 100%";el.style.backgroundPosition="center";}
     else{el.style.backgroundImage="none";el.style.backgroundColor="#e9eef5";}
   }
   // 2) Masquer les contrôles d'UI (œil/crayon) le temps de la capture
