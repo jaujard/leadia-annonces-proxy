@@ -53,7 +53,7 @@ window.CT_IMG_CHAIN = function (u, w) {
   // API item -> format interne commun à tous les modules
   function norm(a) {
     return {
-      prix: a.price, surface: a.surface, terrain: 0, pieces: a.rooms, chambres: a.bedrooms,
+      prix: a.price, surface: a.surface, terrain: (a.land_surface==null||a.land_surface===""?0:Number(a.land_surface)), pieces: a.rooms, chambres: a.bedrooms,
       type: a.type, transaction: a.transaction_type,
       ville: a.city, cp: a.postal_code, dept: a.department, region: a.region,
       adresse: a.title || a.city || "", lat: a.latitude, lon: a.longitude,
