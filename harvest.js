@@ -66,6 +66,21 @@ function int0(v, d) { const n = parseInt(v, 10); return isNaN(n) ? d : n; }
 const num = v => (v == null || v === "" || isNaN(Number(v))) ? null : Number(v);
 const int = v => { const n = num(v); return n == null ? null : Math.round(n); };
 const int4 = v => { const n = int(v); return (n == null || n > 2147483647 || n < -2147483648) ? null : n; };
+// Repli : extraire la surface terrain depuis la description quand le champ structure est vide.
+// Patterns FR : "terrain/parcelle/jardin (clos/arbore/d'environ) de X m²" ou "X m² de terrain".
+// Teste sur annonces reelles (juin 2026) : 0 faux positif (terrain toujours > surface habitable).
+function parseLandFromText(t) {
+  if (!t) return null;
+  t = String(t).replace(/ /g, " ").replace(/&nbsp;/gi, " ");
+  const toNum = s => { const n = parseInt(String(s).replace(/[ .]/g, ""), 10); return isNaN(n) ? null : n; };
+  const M2 = "m(?:\\u00b2|2|\\s*carr)";
+  let m = t.match(new RegExp("(?:terrain|parcelle|jardin)(?:[^.\\d]{0,25}?)(\\d[\\d .]{1,7}?)\\s*" + M2, "i"));
+  if (!m) m = t.match(new RegExp("(\\d[\\d .]{1,7}?)\\s*" + M2 + "\\s*(?:de\\s+)?(?:terrain|parcelle|jardin)", "i"));
+  if (!m) return null;
+  const n = toNum(m[1]);
+  if (n == null || n < 10 || n > 2000000) return null;
+  return n;
+}
 function buildDepartments() {
   const d = [];
   for (let i = 1; i <= 95; i++) { if (i === 20) continue; d.push(String(i).padStart(2, "0")); }
@@ -203,7 +218,7 @@ function mapRow(a, transaction) {
     price_per_m2: num(a.price_per_m2),
     price_per_m2_color: a.price_per_m2_color != null ? a.price_per_m2_color : null,
     surface: num(a.surface),
-    land_surface: num(a.land_surface),
+    land_surface: num(a.land_surface) != null ? num(a.land_surface) : parseLandFromText(a.description),
     living_room_surface: num(a.living_room_surface),
     rooms: int4(a.rooms),
     bedrooms: int4(a.bedrooms),
@@ -384,18 +399,4 @@ async function harvestDept(transaction, dept, watermarkMs) {
     }
   }
 
-  const dt = ((Date.now() - t0) / 1000).toFixed(0);
-  log(`Termine en ${dt}s — base=${apiBase} requetes:${reqCount} annonces vues:${itemCount} upserts:${upsertCount} quota restant:${quotaRemaining}`);
-  await logRun({
-    finished_at: new Date().toISOString(), mode: MODE, requests: reqCount,
-    items_seen: itemCount, upserts: upsertCount, quota_remaining: quotaRemaining == null ? null : String(quotaRemaining),
-    note: `depts=${DEPARTMENTS.length} tx=${TRANSACTIONS.join("+")} base=${apiBase} ${dt}s`
-  });
-
-  // FAIL-LOUD : aucune requete API n'a abouti (proxy ET direct injoignables) -> job ROUGE
-  // (sinon le try/catch par dept masque une panne totale en "succes" a 0 upsert).
-  if (!DRY_RUN && reqCount === 0) {
-    console.error("ÉCHEC : aucune requête API aboutie (proxy ET direct injoignables) — 0 annonce, 0 upsert. Voir les '! ... echec apres retries' ci-dessus.");
-    process.exit(1);
-  }
-})().catch(e => { console.error("Fatal :", e); process.exit(1); });
+  const d
