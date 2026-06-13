@@ -399,4 +399,18 @@ async function harvestDept(transaction, dept, watermarkMs) {
     }
   }
 
-  const d
+  const dt = ((Date.now() - t0) / 1000).toFixed(0);
+  log(`Termine en ${dt}s — base=${apiBase} requetes:${reqCount} annonces vues:${itemCount} upserts:${upsertCount} quota restant:${quotaRemaining}`);
+  await logRun({
+    finished_at: new Date().toISOString(), mode: MODE, requests: reqCount,
+    items_seen: itemCount, upserts: upsertCount, quota_remaining: quotaRemaining == null ? null : String(quotaRemaining),
+    note: `depts=${DEPARTMENTS.length} tx=${TRANSACTIONS.join("+")} base=${apiBase} ${dt}s`
+  });
+
+  // FAIL-LOUD : aucune requete API n'a abouti (proxy ET direct injoignables) -> job ROUGE
+  // (sinon le try/catch par dept masque une panne totale en "succes" a 0 upsert).
+  if (!DRY_RUN && reqCount === 0) {
+    console.error("ÉCHEC : aucune requête API aboutie (proxy ET direct injoignables) — 0 annonce, 0 upsert. Voir les '! ... echec apres retries' ci-dessus.");
+    process.exit(1);
+  }
+})().catch(e => { console.error("Fatal :", e); process.exit(1); });
