@@ -95,6 +95,8 @@ window.CT_IMG_CHAIN = function (u, w) {
     if (params.rMin) q.set("pieces_min", params.rMin);
     if (params.m2Min) q.set("prix_m2_min", params.m2Min);
     if (params.m2Max) q.set("prix_m2_max", params.m2Max);
+    if (params.dpe && params.dpe.length) q.set("dpe", params.dpe.join(","));
+    if (params.ges && params.ges.length) q.set("ges", params.ges.join(","));
     if (params.sort) q.set("sort", params.sort);
     if (params.page) q.set("page", params.page);
     q.set("page_size", "48");   // max imposé par l'API
@@ -145,6 +147,8 @@ window.CT_IMG_CHAIN = function (u, w) {
     f.push.apply(f, pgRange("surface", params.hMin, params.hMax));
     if (params.rMin != null && params.rMin !== "") f.push("rooms=gte." + encodeURIComponent(params.rMin));
     f.push.apply(f, pgRange("price_per_m2", params.m2Min, params.m2Max));
+    if (params.dpe && params.dpe.length) f.push("dpe=in.(" + params.dpe.map(encodeURIComponent).join(",") + ")");
+    if (params.ges && params.ges.length) f.push("ges=in.(" + params.ges.map(encodeURIComponent).join(",") + ")");
     f.push("order=" + dbOrder(params.sort));
     const p = Math.max(1, page || 1);
     f.push("limit=" + (PAGE_SZ + 1));       // +1 pour savoir s'il y a une page suivante

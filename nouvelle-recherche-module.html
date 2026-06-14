@@ -44,6 +44,9 @@
   .row input{width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--txt);border-radius:9px;padding:11px 30px 11px 12px;font-size:14px;outline:none}
   .row .u{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--muted)}
   .lbl{font-size:12.5px;color:var(--muted);margin:4px 0 6px}
+  .elab{display:flex;gap:4px;margin:0 0 9px}
+  .elab button{flex:1;border:2px solid transparent;border-radius:7px;padding:6px 0;font-weight:800;font-size:12.5px;cursor:pointer;opacity:.34;transition:.1s}
+  .elab button.on{opacity:1;border-color:#10131a}
   .toggle{display:flex;align-items:center;justify-content:space-between;font-size:13.5px;color:#4a5066}
   .sw{width:34px;height:19px;background:var(--panel3);border-radius:20px;position:relative;cursor:pointer}.sw i{position:absolute;top:2px;left:2px;width:15px;height:15px;background:#fff;border-radius:50%;transition:.15s}.sw.on{background:var(--accent)}.sw.on i{left:17px}
   .foot{padding:11px 14px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
@@ -206,6 +209,10 @@
         <div class="row"><div class="unit"><input id="rMin" type="number" placeholder="min"></div><div class="unit"><input id="rMax" type="number" placeholder="max (9+)"></div></div>
         <div class="lbl">Prix au m²</div>
         <div class="row"><div class="unit"><input id="m2Min" type="number" placeholder="min"><span class="u">€</span></div><div class="unit"><input id="m2Max" type="number" placeholder="max"><span class="u">€</span></div></div>
+        <div class="lbl">Étiquette DPE</div>
+        <div class="elab" id="dpeF"></div>
+        <div class="lbl">Étiquette GES</div>
+        <div class="elab" id="gesF"></div>
       </div>
       <div class="sec" style="border:none">
       <div class="toggle">Particuliers uniquement <span class="sw" id="part"><i></i></span></div>
@@ -344,7 +351,8 @@ function processList(list){
 function apiSort(){const s=document.getElementById("sort").value;return s==="price-asc"?"price_asc":s==="price-desc"?"price_desc":s==="m2"?"pricem2_asc":"recent";}
 function baseParams(){return {types:[...types],pMin:num("pMin"),pMax:num("pMax"),hMin:num("hMin"),hMax:num("hMax"),
     rMin:num("rMin"),rMax:num("rMax"),m2Min:num("m2Min"),m2Max:num("m2Max"),part:part.classList.contains("on"),
-    kw:document.getElementById("kw").value.trim(),tx:document.getElementById("tx").value,locs,rayon:+rad.value,sort:apiSort()};}
+    kw:document.getElementById("kw").value.trim(),tx:document.getElementById("tx").value,locs,rayon:+rad.value,sort:apiSort(),
+    dpe:[...dpeSet],ges:[...gesSet]};}
 async function run(){ page=1; raw=[]; current=[]; await loadPage(false); }
 async function loadPage(append){
   if(loading)return; loading=true;
@@ -533,6 +541,14 @@ document.addEventListener("keydown",e=>{if(lb.style.display==="flex"){if(e.key==
 
 /* ---------- fiche détail ---------- */
 const DPC={A:"#2f9e41",B:"#5bbd3a",C:"#b6d136",D:"#f4e500",E:"#f6b13b",F:"#ef7d2a",G:"#e3151b"};
+const GESP={A:"#d5c3ea",B:"#c1a3df",C:"#ad84d2",D:"#9a66c6",E:"#854cb3",F:"#6f349f",G:"#561d80"};
+/* filtre étiquette DPE/GET — boutons A-G colorés, multi-sélection */
+function buildElab(id,colors,darkUpto){const wrap=document.getElementById(id);const set=new Set();if(!wrap)return set;
+  "ABCDEFG".split("").forEach(l=>{const b=document.createElement("button");b.textContent=l;b.dataset.v=l;
+    b.style.background=colors[l];b.style.color=("ABCDEFG".indexOf(l)<=darkUpto?"#10131a":"#fff");
+    b.onclick=()=>{b.classList.toggle("on");b.classList.contains("on")?set.add(l):set.delete(l);run();};
+    wrap.appendChild(b);});return set;}
+const dpeSet=buildElab("dpeF",DPC,3), gesSet=buildElab("gesF",GESP,2);
 const dEl=document.getElementById("detail");
 function openDetail(a,focusDesc){
   const m2=a.surface?Math.round(a.prix/a.surface):null,imgs=a.images||[];
@@ -563,7 +579,7 @@ if(location.hash==="#ancien"){
 
 /* ---------- pré-remplissage depuis la loupe « Annonces » du panneau DPE ----------
    URL : nouvelle-recherche-module.html?dpepre=1&ty=maison&smin=&smax=&ville=&cp=&dpe=&ges=
-   (ty/surface/ville sont appliqués ; dpe/ges sont passés mais ce module n'a pas de filtre étiquette UI) */
+   (ty/surface/ville + étiquette DPE/GES appliqués) */
 (function dpePrefill(){
   try{
     const q=new URLSearchParams(location.search);
@@ -576,6 +592,9 @@ if(location.hash==="#ancien"){
     if(smin)document.getElementById("hMin").value=smin;
     if(smax)document.getElementById("hMax").value=smax;
     const ville=q.get("ville");if(ville){locs=[ville];renderLoc();}
+    const setLab=(id,set,letter)=>{if(!/^[A-G]$/.test(letter))return;const b=document.querySelector("#"+id+' button[data-v="'+letter+'"]');if(b){b.classList.add("on");set.add(letter);}};
+    setLab("dpeF",dpeSet,(q.get("dpe")||"").toUpperCase());
+    setLab("gesF",gesSet,(q.get("ges")||"").toUpperCase());
   }catch(e){console.warn("dpePrefill",e);}
 })();
 run();
