@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DPE — Prospection (réplique Cadastre.com · données ADEME)</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  :root{
+    --bg:#0d0b14; --panel:#15121d; --panel2:#221d30; --panel3:#2b2540;
+    --border:#2c2640; --txt:#ece9f3; --muted:#9d96b0;
+    --accent:#7c4dff; --accent2:#4361ee; --sel-bg:#e9e2fb; --sel-tx:#5a32d6;
+    --A:#2f9e41; --B:#5bbd3a; --C:#b6d136; --D:#f4e500; --E:#f6b13b; --F:#ef7d2a; --G:#e3151b;
+    --gA:#e4f1dc; --gB:#dceac9; --gC:#f5dee6; --gD:#efd0dc; --gE:#dfa9c0; --gF:#a875a0; --gG:#7a5388;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--txt);overflow:hidden}
+  #map{position:absolute;inset:0 390px 0 0}
+  /* ---- top center geolocator ---- */
+  #geo{position:absolute;top:14px;left:50%;transform:translateX(-50%);width:430px;z-index:1200;max-width:38vw}
+  #geo .box{display:flex;align-items:center;gap:8px;background:#15121dEE;border:1px solid var(--border);
+    border-radius:11px;padding:10px 13px;backdrop-filter:blur(6px);box-shadow:0 6px 24px #0007}
+  #geo input{flex:1;background:none;border:none;outline:none;color:var(--txt);font-size:13.5px}
+  #geo svg{flex:none;opacity:.7}
+  #suggest{margin-top:6px;background:#181423F2;border:1px solid var(--border);border-radius:11px;overflow:hidden;display:none;box-shadow:0 12px 30px #0009}
+  #suggest div{padding:9px 14px;font-size:13px;cursor:pointer;border-bottom:1px solid #ffffff0d}
+  #suggest div:hover{background:var(--panel3)}
+  #suggest div small{color:var(--muted)}
+  /* ---- top-left basemap toggle ---- */
+  #basemap{position:absolute;top:14px;left:14px;z-index:1200;display:flex;background:#15121dEE;border:1px solid var(--border);
+    border-radius:10px;padding:4px;gap:3px;box-shadow:0 6px 20px #0007}
+  #basemap button{background:none;border:none;color:var(--muted);font-size:12.5px;padding:6px 12px;border-radius:7px;cursor:pointer}
+  #basemap button.on{background:var(--panel3);color:#fff;font-weight:600}
+  /* ---- right panel ---- */
+  #panel{position:absolute;top:0;right:0;width:390px;height:100%;background:var(--panel);border-left:1px solid var(--border);
+    display:flex;flex-direction:column}
+  .ptop{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center}
+  .ptop input{flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--txt);
+    padding:8px 10px;font-size:12.5px;outline:none}
+  .ptop button{background:var(--panel2);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:8px 12px;font-size:12px;cursor:pointer}
+  .scroll{flex:1;overflow-y:auto;padding:6px 16px 12px}
+  .scroll::-webkit-scrollbar{width:9px}.scroll::-webkit-scrollbar-thumb{background:#3a3352;border-radius:9px;border:2px solid var(--panel)}
+  .sec{padding:13px 0;border-bottom:1px solid #ffffff0a}
+  .sec h3{margin:0 0 9px;font-size:12px;font-weight:600;color:#cfc9de;display:flex;align-items:center;gap:7px}
+  .sec h3 .i{opacity:.85}
+  .seg{display:flex;flex-wrap:wrap;gap:6px}
+  .seg button{flex:1 1 auto;min-width:62px;background:var(--panel2);border:1px solid var(--border);color:var(--muted);
+    border-radius:8px;padding:8px 6px;font-size:12px;cursor:pointer;transition:.1s;white-space:nowrap}
+  .seg button.on{background:var(--sel-bg);border-color:var(--sel-bg);color:var(--sel-tx);font-weight:600}
+  .seg.full button{flex:1 1 22%}
+  .wide{width:100%;margin-top:6px;background:var(--panel2);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:9px;font-size:12px;cursor:pointer}
+  .wide.on{background:var(--sel-bg);border-color:var(--sel-bg);color:var(--sel-tx);font-weight:600}
+  .row{display:flex;gap:8px;align-items:center}
+  .row .unit{position:relative;flex:1}
+  .row input{width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--txt);border-radius:8px;padding:9px 34px 9px 10px;font-size:12.5px;outline:none}
+  .row .u{position:absolute;right:9px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--muted)}
+  .labels{display:flex;gap:5px;margin-bottom:7px}
+  .labels:last-child{margin-bottom:0}
+  .labels .tag{flex:none;width:34px;font-size:11px;color:var(--muted);display:flex;align-items:center}
+  .labels button{flex:1;border:2px solid transparent;border-radius:7px;padding:7px 0;font-weight:800;font-size:13px;cursor:pointer;color:#15121d;opacity:.34;transition:.1s}
+  .labels button.on{opacity:1;border-color:#fff}
+  .dA{background:var(--A)}.dB{background:var(--B)}.dC{background:var(--C)}.dD{background:var(--D)}.dE{background:var(--E)}.dF{background:var(--F)}.dG{background:var(--G);color:#fff}
+  .gA{background:var(--gA)}.gB{background:var(--gB)}.gC{background:var(--gC)}.gD{background:var(--gD)}.gE{background:var(--gE)}.gF{background:var(--gF);color:#fff}.gG{background:var(--gG);color:#fff}
+  .meta{font-size:11.5px;color:var(--muted);display:flex;justify-content:space-between;padding:3px 0}
+  .meta b{color:#bcd4ff;font-weight:600}
+  .src{font-size:11.5px;color:var(--accent2);text-decoration:none}
+  .toggle{display:flex;align-items:center;justify-content:flex-end;gap:9px;font-size:12.5px;color:var(--muted)}
+  .sw{width:34px;height:19px;background:var(--panel3);border-radius:20px;position:relative;cursor:pointer;transition:.15s}
+  .sw i{position:absolute;top:2px;left:2px;width:15px;height:15px;background:#fff;border-radius:50%;transition:.15s}
+  .sw.on{background:var(--accent)}.sw.on i{left:17px}
+  /* footer */
+  .foot{display:flex;gap:9px;padding:11px 16px;border-top:1px solid var(--border)}
+  .reset{flex:none;background:none;border:1px solid #5a2740;color:#ff6f9c;border-radius:9px;padding:11px 16px;font-size:12.5px;cursor:pointer;font-weight:600}
+  .go{flex:1;border:none;border-radius:9px;padding:11px;font-size:13.5px;font-weight:700;cursor:pointer;color:#fff;
+    background:linear-gradient(90deg,var(--accent2),var(--accent))}
+  .go:disabled{opacity:.55;cursor:not-allowed}
+  /* drawer */
+  #drawer{border-top:1px solid var(--border)}
+  #drawerBar{background:linear-gradient(90deg,#3a2275,#5a32c0);padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;display:flex;justify-content:space-between;align-items:center}
+  #drawerBar small{font-weight:500;opacity:.85}
+  #list{max-height:34vh;overflow-y:auto;display:none;background:var(--panel)}
+  .item{padding:9px 16px;border-bottom:1px solid #ffffff0a;cursor:pointer;display:flex;gap:10px;align-items:center}
+  .item:hover{background:var(--panel2)}
+  .chip{flex:none;width:25px;height:25px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:#15121d}
+  .item .a{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .item .s{font-size:10.5px;color:var(--muted);margin-top:1px}
+  .ges{font-size:9.5px;padding:1px 5px;border-radius:4px;font-weight:800;color:#15121d}
+  .pin{font-weight:800;font-size:11px;color:#15121d;border:2px solid #fff;border-radius:50%;width:23px;height:23px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px #0008}
+  .rad-tip{background:#15121dEE;color:#fff;border:1px solid var(--accent);border-radius:6px;padding:2px 7px;font-size:11px;font-weight:600;white-space:nowrap}
+  .leaflet-popup-content{font-size:12px;line-height:1.5}
+  .spin{display:inline-block;width:13px;height:13px;border:2px solid #fff5;border-top-color:#fff;border-radius:50%;animation:r .7s linear infinite;vertical-align:-2px;margin-right:7px}
+  @keyframes r{to{transform:rotate(360deg)}}
+  .note{font-size:10.5px;color:#6f6885;padding:2px 0 0}
+  #display{position:absolute;left:14px;bottom:18px;z-index:1200;background:#15121dF0;border:1px solid var(--border);
+    border-radius:10px;padding:6px;display:flex;flex-direction:column;gap:2px;box-shadow:0 6px 20px #0007;width:206px}
+  #display button{display:flex;align-items:center;gap:9px;background:none;border:none;color:var(--muted);font-size:12px;
+    padding:7px 9px;border-radius:7px;cursor:pointer;text-align:left;width:100%}
+  #display button.on{background:var(--panel3);color:#fff}
+  #display .dot{width:9px;height:9px;border-radius:50%;background:#5a5470;flex:none}
+  #display button.on .dot{background:var(--accent)}
+  .pin.seen{filter:grayscale(.7);opacity:.55}
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div id="basemap">
+  <button data-b="ign">IGN</button>
+  <button data-b="plan">Plan</button>
+  <button data-b="sat" class="on">Satellite</button>
+</div>
+
+<div id="geo">
+  <div class="box">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+    <input id="geoIn" placeholder="Adresse, commune, N° parcelle…" autocomplete="off" />
+  </div>
+  <div id="suggest"></div>
+</div>
+
+<div id="display">
+  <button data-m="dpe" class="on"><span class="dot"></span>Marqueurs DPE</button>
+  <button data-m="ges"><span class="dot"></span>Marqueurs GES</button>
+  <button data-t="bati"><span class="dot"></span>Contour des bâtiments</button>
+  <button data-t="baties"><span class="dot"></span>Parcelles bâties</button>
+  <button data-t="nus"><span class="dot"></span>Terrains nus</button>
+  <button data-t="vues"><span class="dot"></span>Parcelles déjà vues</button>
+</div>
+
+<div id="panel">
+  <div class="ptop">
+    <input placeholder="Lien de l'annonce à comparer" />
+    <button>Coller</button>
+  </div>
+  <div class="scroll">
+
+    <div class="sec">
+      <h3><span class="i">📍</span> Zone de recherche</h3>
+      <div class="seg" id="zone">
+        <button data-z="cercle" class="on">Cercle</button>
+        <button data-z="donut">Donut</button>
+        <button data-z="rectangle">Rectangle</button>
+        <button data-z="polygone">Polygone</button>
+      </div>
+      <div class="seg" style="margin-top:6px" id="zone2">
+        <button data-z="ville">Ville</button>
+        <button data-z="quartiers">Quartiers</button>
+        <button data-z="plu">PLU</button>
+      </div>
+      <button class="wide" id="prospect">Zone de prospection</button>
+      <div class="note">Le cercle apparaît sur la carte : déplacez le centre, tirez la poignée pour le rayon.</div>
+    </div>
+
+    <div class="sec">
+      <h3><span class="i">🏚️</span> Classe du bien</h3>
+      <div class="seg full" id="classe">
+        <button data-c="" class="on">Tout</button>
+        <button data-c="ancien">Ancien</button>
+        <button data-c="neuf">Neuf</button>
+        <button data-c="pro">Pro.</button>
+      </div>
+    </div>
+
+    <div class="sec">
+      <h3><span class="i">🏠</span> Type de bien</h3>
+      <div class="seg full" id="type">
+        <button data-t="" class="on">Tout</button>
+        <button data-t="maison">Maison</button>
+        <button data-t="appartement">Appart.</button>
+        <button data-t="immeuble">Autre</button>
+      </div>
+    </div>
+
+    <div class="sec">
+      <h3><span class="i">📅</span> Date du DPE</h3>
+      <div class="seg full" id="date">
+        <button data-d="" class="on">Tout</button>
+        <button data-d="2023">2023</button>
+        <button data-d="2024">2024</button>
+        <button data-d="2025">2025</button>
+        <button data-d="2026">2026</button>
+        <button data-d="mois">Mois</button>
+        <button data-d="semaine">Semaines</button>
+      </div>
+    </div>
+
+    <div class="sec">
+      <h3><span class="i">📐</span> Surface habitable</h3>
+      <div class="row">
+        <div class="unit"><input id="sMin" type="number" min="0" placeholder="min"><span class="u">m²</span></div>
+        <div class="unit"><input id="sMax" type="number" min="0" placeholder="max"><span class="u">m²</span></div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <h3><span class="i">⚡</span> Bilan énergétique /m²/an</h3>
+      <div class="row" style="margin-bottom:7px">
+        <span style="width:34px;font-size:11px;color:var(--muted)">DPE</span>
+        <div class="unit"><input id="eMin" type="number" min="0" placeholder="min"><span class="u">kWhEP</span></div>
+        <div class="unit"><input id="eMax" type="number" min="0" placeholder="max"><span class="u">kWhEP</span></div>
+      </div>
+      <div class="row">
+        <span style="width:34px;font-size:11px;color:var(--muted)">GES</span>
+        <div class="unit"><input id="gMin" type="number" min="0" placeholder="min"><span class="u">kgCO2</span></div>
+        <div class="unit"><input id="gMax" type="number" min="0" placeholder="max"><span class="u">kgCO2</span></div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <h3><span class="i">✴️</span> Étiquette</h3>
+      <div class="labels" id="dpeLab">
+        <span class="tag">DPE</span>
+        <button class="dA" data-v="A">A</button><button class="dB" data-v="B">B</button><button class="dC" data-v="C">C</button>
+        <button class="dD" data-v="D">D</button><button class="dE" data-v="E">E</button><button class="dF" data-v="F">F</button><button class="dG" data-v="G">G</button>
+      </div>
+      <div class="labels" id="gesLab">
+        <span class="tag">GES</span>
+        <button class="gA" data-v="A">A</button><button class="gB" data-v="B">B</button><button class="gC" data-v="C">C</button>
+        <button class="gD" data-v="D">D</button><button class="gE" data-v="E">E</button><button class="gF" data-v="F">F</button><button class="gG" data-v="G">G</button>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="meta"><span>Dernière mise à jour ADEME :</span><b id="majAdeme">—</b></div>
+      <div class="meta"><span>Source officielle :</span><a class="src" href="https://data.ademe.fr/datasets/dpe03existant" target="_blank">data.ademe.fr</a></div>
+    </div>
+
+    <div class="sec" style="border:none">
+      <div class="toggle">Inclure DVF <span class="sw" id="dvf"><i></i></span></div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <button class="reset" id="reset">Réinitialiser</button>
+    <button class="go" id="go"><span id="goTx">Voir les parcelles</span></button>
+  </div>
+
+  <div id="drawer">
+    <div id="drawerBar"><span id="dpeCount">0 DPE</span><small id="parcCount">0 parcelles</small></div>
+    <div id="list"></div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const ADEME="https://data.ademe.fr/data-fair/api/v1/datasets/dpe03existant/lines";
+const BAN="https://api-adresse.data.gouv.fr/search/";
+const TODAY=new Date("2026-06-02");
+const C={A:"#2f9e41",B:"#5bbd3a",C:"#b6d136",D:"#f4e500",E:"#f6b13b",F:"#ef7d2a",G:"#e3151b"};
+const SELECT=["numero_dpe","etiquette_dpe","etiquette_ges","type_batiment","surface_habitable_logement",
+ "date_etablissement_dpe","adresse_ban","code_postal_ban","nom_commune_ban","periode_construction",
+ "conso_5_usages_par_m2_ep","emission_ges_5_usages_par_m2","identifiant_ban","complement_adresse_logement","_geopoint"].join(",");
+
+/* ---------- map + basemaps (IGN) ---------- */
+const map=L.map("map",{zoomControl:true}).setView([46.6,2.4],6);  // France entière par défaut
+const wmts=(l,f)=>"https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER="+l+
+  "&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT="+f;
+const bases={
+  ign:L.tileLayer(wmts("GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2","image/png"),{attribution:"© IGN/Géoplateforme",maxZoom:19}),
+  plan:L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",{attribution:"© OSM © CARTO",maxZoom:20,subdomains:"abcd"}),
+  sat:L.tileLayer(wmts("ORTHOIMAGERY.ORTHOPHOTOS","image/jpeg"),{attribution:"© IGN/Géoplateforme",maxZoom:20})
+};
+let curBase=bases.sat.addTo(map);  // Satellite par défaut à l'ouverture
+/* parcelles cadastrales en vecteur, tracées en vert (comme Cadastre.com) */
+const parcelGeo=L.geoJSON(null,{style:{color:"#39e63a",weight:1.1,fillColor:"#39e63a",fillOpacity:.05},
+  onEachFeature:(f,l)=>{const p=f.properties||{};l.bindPopup("Parcelle "+(p.section||"")+" "+(p.numero||"")+"<br>"+(p.contenance!=null?p.contenance+" m²":"")+(p.nom_com?" · "+p.nom_com:"")+(p.idu?"<br><small>"+p.idu+"</small>":""));}
+}).addTo(map);
+let pTmr;
+function loadParcels(){
+  clearTimeout(pTmr);
+  if(map.getZoom()<16){parcelGeo.clearLayers();return;}
+  pTmr=setTimeout(async()=>{
+    const b=map.getBounds(),bbox=b.getSouth()+","+b.getWest()+","+b.getNorth()+","+b.getEast();
+    try{const r=await fetch("https://data.geopf.fr/wfs/ows?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=CADASTRALPARCELS.PARCELLAIRE_EXPRESS:parcelle&SRSNAME=CRS:84&OUTPUTFORMAT=application/json&COUNT=2500&BBOX="+bbox);
+      const d=await r.json();parcelGeo.clearLayers();parcelGeo.addData(d);if(typeof styleParcels==="function")styleParcels();}catch(e){}
+  },350);
+}
+document.querySelectorAll("#basemap button").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll("#basemap button").forEach(x=>x.classList.remove("on"));b.classList.add("on");
+  map.removeLayer(curBase);curBase=bases[b.dataset.b].addTo(map);curBase.bringToBack();
+});
+const markers=L.layerGroup().addTo(map);
+
+/* ---------- editable zones (cercle / donut / rectangle / polygone) ---------- */
+let zone="cercle";
+let center=[47.394,0.687], radius=350, inner=150;
+let rect=null;          // {s,w,n,e}
+let poly=[];            // [[lat,lon],...]
+let adminPoly=null, adminCode=null, adminLabel="";  // ville / quartiers / plu
+let shapeLayer=null, innerLayer=null, handles=[];
+const ADMIN=["ville","quartiers","plu"];
+const SHAPE={color:"#9a6bff",weight:1.5,fillColor:"#7c4dff",fillOpacity:.10};
+
+function dot(color){return L.divIcon({className:"",html:'<div style="width:14px;height:14px;border-radius:50%;background:'+color+';border:2px solid #fff;box-shadow:0 1px 4px #0008"></div>',iconSize:[14,14]});}
+function tip(t){return {permanent:true,direction:"right",className:"rad-tip",offset:[8,0]};}
+function radLabel(r){return "Rayon : "+(r>=1000?(r/1000).toFixed(2)+" km":r+" m");}
+function eastPoint(c,r){return [c[0], L.latLng(c).toBounds(r*2).getEast()];}
+function mk(ll,color,t){const h=L.marker(ll,{icon:dot(color),draggable:true,zIndexOffset:700}).addTo(map);
+  if(t)h.bindTooltip(t,tip());handles.push(h);return h;}
+function clearShape(){[shapeLayer,innerLayer].forEach(l=>{if(l)map.removeLayer(l);});shapeLayer=innerLayer=null;
+  handles.forEach(h=>map.removeLayer(h));handles=[];}
+function normRect(){const s=Math.min(rect.s,rect.n),n=Math.max(rect.s,rect.n),w=Math.min(rect.w,rect.e),e=Math.max(rect.w,rect.e);rect={s,n,w,e};}
+
+function buildShape(){
+  clearShape();
+  if(ADMIN.includes(zone)){
+    if(adminPoly){shapeLayer=L.polygon(adminPoly,SHAPE).addTo(map);
+      if(adminLabel)shapeLayer.bindTooltip(adminLabel,{sticky:true});
+      try{map.fitBounds(shapeLayer.getBounds(),{padding:[30,30]});}catch(e){}}
+    return;
+  }
+  if(zone==="cercle"||zone==="donut"){
+    shapeLayer=L.circle(center,{...SHAPE,radius}).addTo(map);
+    if(zone==="donut") innerLayer=L.circle(center,{color:"#9a6bff",weight:1.2,dashArray:"4 4",fill:false,radius:inner}).addTo(map);
+    const eH=mk(eastPoint(center,radius),"#fff",radLabel(radius));
+    let iH=null; if(zone==="donut") iH=mk(eastPoint(center,inner),"#ffd24d","Trou : "+inner+" m");
+    const cH=mk(center,"#7c4dff");
+    cH.on("drag",e=>{center=[e.latlng.lat,e.latlng.lng];shapeLayer.setLatLng(center);
+      if(innerLayer)innerLayer.setLatLng(center);eH.setLatLng(eastPoint(center,radius));if(iH)iH.setLatLng(eastPoint(center,inner));});
+    cH.on("dragend",auto);
+    eH.on("drag",e=>{radius=Math.max(zone==="donut"?inner+30:50,Math.round(map.distance(center,e.latlng)));
+      shapeLayer.setRadius(radius);eH.setTooltipContent(radLabel(radius));});
+    eH.on("dragend",()=>{eH.setLatLng(eastPoint(center,radius));auto();});
+    if(iH){iH.on("drag",e=>{inner=Math.max(30,Math.min(radius-30,Math.round(map.distance(center,e.latlng))));
+      innerLayer.setRadius(inner);iH.setTooltipContent("Trou : "+inner+" m");});
+      iH.on("dragend",()=>{iH.setLatLng(eastPoint(center,inner));auto();});}
+  }
+  else if(zone==="rectangle"){
+    if(!rect){const b=L.latLng(center).toBounds(radius*2);rect={s:b.getSouth(),w:b.getWest(),n:b.getNorth(),e:b.getEast()};}
+    shapeLayer=L.rectangle([[rect.s,rect.w],[rect.n,rect.e]],SHAPE).addTo(map);
+    const sw=mk([rect.s,rect.w],"#fff"), ne=mk([rect.n,rect.e],"#fff"),
+          ct=mk([(rect.s+rect.n)/2,(rect.w+rect.e)/2],"#7c4dff");
+    const upd=()=>{shapeLayer.setBounds([[rect.s,rect.w],[rect.n,rect.e]]);ct.setLatLng([(rect.s+rect.n)/2,(rect.w+rect.e)/2]);};
+    sw.on("drag",e=>{rect.s=e.latlng.lat;rect.w=e.latlng.lng;upd();});
+    ne.on("drag",e=>{rect.n=e.latlng.lat;rect.e=e.latlng.lng;upd();});
+    ct.on("drag",e=>{const h=(rect.n-rect.s)/2,w=(rect.e-rect.w)/2;
+      rect.s=e.latlng.lat-h;rect.n=e.latlng.lat+h;rect.w=e.latlng.lng-w;rect.e=e.latlng.lng+w;
+      shapeLayer.setBounds([[rect.s,rect.w],[rect.n,rect.e]]);sw.setLatLng([rect.s,rect.w]);ne.setLatLng([rect.n,rect.e]);});
+    [sw,ne,ct].forEach(h=>h.on("dragend",()=>{normRect();buildShape();auto();}));
+  }
+  else if(zone==="polygone"){
+    if(poly.length<3){const b=L.latLng(center).toBounds(radius*2);
+      poly=[[b.getNorth(),b.getWest()],[b.getNorth(),b.getEast()],[b.getSouth(),b.getEast()],[b.getSouth(),b.getWest()]];}
+    shapeLayer=L.polygon(poly,SHAPE).addTo(map);
+    poly.forEach((p,i)=>{const h=mk(p,"#fff");
+      h.on("drag",e=>{poly[i]=[e.latlng.lat,e.latlng.lng];shapeLayer.setLatLngs(poly);});
+      h.on("dragend",auto);});
+  }
+}
+function recenterTo(lat,lon,fly){
+  if(ADMIN.includes(zone)){
+    if(fly)map.setView([lat,lon],Math.max(map.getZoom(),14));
+    pickAdmin(lat,lon);return;
+  }
+  if(zone==="rectangle"&&rect){const h=(rect.n-rect.s)/2,w=(rect.e-rect.w)/2;rect={s:lat-h,n:lat+h,w:lon-w,e:lon+w};buildShape();}
+  else if(zone==="polygone"){/* on garde le polygone dessiné */}
+  else{center=[lat,lon];buildShape();}
+  if(fly)map.setView([lat,lon],Math.max(map.getZoom(),16));
+  auto();
+}
+/* ----- limites administratives (ville / quartiers / plu) ----- */
+function ringsFromGeo(g){
+  if(g.type==="Polygon")return g.coordinates.map(r=>r.map(c=>[c[1],c[0]]));
+  if(g.type==="MultiPolygon")return g.coordinates.flatMap(p=>p.map(r=>r.map(c=>[c[1],c[0]])));
+  return [];
+}
+function pickAdmin(lat,lon){
+  if(zone==="ville")return fetchVille(lat,lon);
+  if(zone==="quartiers")return fetchIris(lat,lon);
+  if(zone==="plu")return fetchPlu(lat,lon);
+}
+async function fetchVille(lat,lon){
+  goTx.innerHTML='<span class="spin"></span>Commune…';
+  try{
+    const r=await fetch("https://geo.api.gouv.fr/communes?lat="+lat+"&lon="+lon+"&fields=nom,code&format=geojson&geometry=contour");
+    const d=await r.json(),f=d.features&&d.features[0];
+    if(!f){alert("Aucune commune trouvée ici.");idle();return;}
+    adminCode=f.properties.code;adminPoly=ringsFromGeo(f.geometry);adminLabel="Commune : "+f.properties.nom;
+    buildShape();auto();
+  }catch(e){alert("Erreur récupération commune.");idle();}
+}
+async function fetchIris(lat,lon){
+  goTx.innerHTML='<span class="spin"></span>Quartier…';
+  try{
+    const r=await fetch("https://public.opendatasoft.com/api/records/1.0/search/?dataset=georef-france-iris-millesime&geofilter.distance="+lat+","+lon+",60&rows=10");
+    const d=await r.json(),recs=d.records||[];
+    if(!recs.length){alert("Aucun quartier (IRIS) trouvé ici.");idle();return;}
+    let chosen=recs.find(rec=>{const rg=ringsFromGeo(rec.fields.geo_shape);return rg[0]&&pointInPoly(lat,lon,rg[0]);})||recs[0];
+    adminCode=null;adminPoly=ringsFromGeo(chosen.fields.geo_shape);
+    adminLabel="Quartier : "+chosen.fields.iris_name+" — "+chosen.fields.com_name;
+    buildShape();auto();
+  }catch(e){alert("Erreur récupération du quartier.");idle();}
+}
+async function fetchPlu(lat,lon){
+  goTx.innerHTML='<span class="spin"></span>PLU…';
+  try{
+    const geom=encodeURIComponent(JSON.stringify({type:"Point",coordinates:[lon,lat]}));
+    const r=await fetch("https://apicarto.ign.fr/api/gpu/zone-urba?geom="+geom);
+    const d=await r.json(),f=d.features&&d.features[0];
+    if(!f){alert("Aucune zone PLU à cet endroit (la couverture du Géoportail de l'Urbanisme est partielle au niveau national).");go.disabled=false;goTx.textContent="Voir les parcelles";return;}
+    const p=f.properties;adminCode=null;adminPoly=ringsFromGeo(f.geometry);
+    adminLabel="PLU : "+(p.libelle||p.libelong||"Zone")+(p.typezone?" ("+p.typezone+")":"");
+    buildShape();auto();
+  }catch(e){alert("Erreur récupération PLU.");}
+}
+function pointInPoly(lat,lon,pts){let inside=false;for(let i=0,j=pts.length-1;i<pts.length;j=i++){
+  const yi=pts[i][0],xi=pts[i][1],yj=pts[j][0],xj=pts[j][1];
+  if(((yi>lat)!=(yj>lat))&&(lon<(xj-xi)*(lat-yi)/(yj-yi)+xi))inside=!inside;}return inside;}
+function geoParams(){
+  if(zone==="ville"){return adminCode?{extraQs:'code_insee_ban:"'+adminCode+'"',contains:null}:null;}
+  if(zone==="quartiers"||zone==="plu"){
+    if(!adminPoly||!adminPoly[0])return null;
+    const ring=adminPoly[0],la=ring.map(p=>p[0]),lo=ring.map(p=>p[1]);
+    return {key:"bbox",val:Math.min(...lo)+","+Math.min(...la)+","+Math.max(...lo)+","+Math.max(...la),
+      contains:(y,x)=>pointInPoly(y,x,ring)};}
+  if(zone==="rectangle"&&rect){normRect();
+    return {key:"bbox",val:rect.w+","+rect.s+","+rect.e+","+rect.n,contains:null};}
+  if(zone==="polygone"&&poly.length>=3){
+    const la=poly.map(p=>p[0]),lo=poly.map(p=>p[1]);
+    return {key:"bbox",val:Math.min(...lo)+","+Math.min(...la)+","+Math.max(...lo)+","+Math.max(...la),
+      contains:(y,x)=>pointInPoly(y,x,poly)};}
+  if(zone==="donut")
+    return {key:"geo_distance",val:center[1]+","+center[0]+","+radius,contains:(y,x)=>map.distance(center,[y,x])>=inner};
+  return {key:"geo_distance",val:center[1]+","+center[0]+","+radius,contains:null};
+}
+map.on("click",e=>{
+  if(zone==="polygone"){poly.push([e.latlng.lat,e.latlng.lng]);buildShape();auto();}
+  else recenterTo(e.latlng.lat,e.latlng.lng,false);
+});
+map.on("moveend",loadParcels);
+
+/* ---------- geolocator (BAN autocomplete) ---------- */
+const geoIn=document.getElementById("geoIn"), sug=document.getElementById("suggest");
+let tmr;
+geoIn.addEventListener("input",()=>{clearTimeout(tmr);const q=geoIn.value.trim();if(q.length<3){sug.style.display="none";return;}
+  tmr=setTimeout(async()=>{
+    try{const r=await fetch(BAN+"?q="+encodeURIComponent(q)+"&limit=7&autocomplete=1");const d=await r.json();
+      sug.innerHTML="";(d.features||[]).forEach(f=>{const div=document.createElement("div");
+        const p=f.properties;div.innerHTML="<b>"+p.label+"</b>"+(p.context?" <small>· "+p.context+"</small>":"");
+        div.onclick=()=>{geoIn.value=p.label;sug.style.display="none";recenterTo(f.geometry.coordinates[1],f.geometry.coordinates[0],true);};
+        sug.appendChild(div);});
+      sug.style.display=d.features&&d.features.length?"block":"none";
+    }catch(e){}
+  },250);
+});
+document.addEventListener("click",e=>{if(!document.getElementById("geo").contains(e.target))sug.style.display="none";});
+
+/* ---------- filters ---------- */
+function single(id,attr){let v="";document.querySelectorAll("#"+id+" button").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll("#"+id+" button").forEach(x=>x.classList.remove("on"));b.classList.add("on");v=b.dataset[attr];auto();});return ()=>v;}
+const getClasse=single("classe","c"), getType=single("type","t"), getDate=single("date","d");
+document.querySelectorAll("#zone button,#zone2 button").forEach(b=>b.onclick=()=>{
+  const z=b.dataset.z;
+  document.querySelectorAll("#zone button,#zone2 button").forEach(x=>x.classList.remove("on"));b.classList.add("on");
+  zone=z; adminPoly=null; adminCode=null; adminLabel="";
+  if(z==="polygone"){poly=[];geoIn.placeholder="Cliquez sur la carte pour ajouter des sommets…";}
+  else geoIn.placeholder="Adresse, commune, N° parcelle…";
+  if(z==="ville"){buildShape();fetchVille(center[0],center[1]);return;}      // commune du centre courant
+  if(z==="quartiers"){clearShape();geoIn.placeholder="Cliquez sur la carte pour choisir un quartier (IRIS)…";goTx.textContent="Cliquez sur un quartier";return;}
+  if(z==="plu"){clearShape();geoIn.placeholder="Cliquez sur la carte pour choisir une zone PLU…";goTx.textContent="Cliquez sur une zone PLU";return;}
+  buildShape(); auto();
+});
+function multi(id){const s=new Set();document.querySelectorAll("#"+id+" button").forEach(b=>b.onclick=()=>{
+  b.classList.toggle("on");b.classList.contains("on")?s.add(b.dataset.v):s.delete(b.dataset.v);auto();});return s;}
+const dpeSet=multi("dpeLab"), gesSet=multi("gesLab");
+["sMin","sMax","eMin","eMax","gMin","gMax"].forEach(id=>document.getElementById(id).addEventListener("change",auto));
+const dvf=document.getElementById("dvf");dvf.onclick=()=>dvf.classList.toggle("on");
+
+function rangeQ(field,min,max){if(!min&&!max)return null;return field+":["+(min||"*")+" TO "+(max||"*")+"]";}
+function fmtD(d){const z=n=>(""+n).padStart(2,"0");return d.getFullYear()+"-"+z(d.getMonth()+1)+"-"+z(d.getDate());}
+function buildQs(){
+  const p=[];
+  const t=getType();if(t)p.push('type_batiment:"'+t+'"');
+  if(dpeSet.size)p.push("etiquette_dpe:("+[...dpeSet].join(" OR ")+")");
+  if(gesSet.size)p.push("etiquette_ges:("+[...gesSet].join(" OR ")+")");
+  const d=getDate();
+  if(d==="mois"){const x=new Date(TODAY);x.setMonth(x.getMonth()-1);p.push("date_etablissement_dpe:["+fmtD(x)+" TO *]");}
+  else if(d==="semaine"){const x=new Date(TODAY);x.setDate(x.getDate()-7);p.push("date_etablissement_dpe:["+fmtD(x)+" TO *]");}
+  else if(d==="2026")p.push("date_etablissement_dpe:[2026-01-01 TO *]");
+  else if(d)p.push("date_etablissement_dpe:["+d+"-01-01 TO "+d+"-12-31]");
+  const sv=id=>document.getElementById(id).value;
+  let r;
+  if(r=rangeQ("surface_habitable_logement",sv("sMin"),sv("sMax")))p.push(r);
+  if(r=rangeQ("conso_5_usages_par_m2_ep",sv("eMin"),sv("eMax")))p.push(r);
+  if(r=rangeQ("emission_ges_5_usages_par_m2",sv("gMin"),sv("gMax")))p.push(r);
+  return p.join(" AND ");
+}
+
+/* ---------- search ---------- */
+const go=document.getElementById("go"),goTx=document.getElementById("goTx"),
+  dpeCount=document.getElementById("dpeCount"),parcCount=document.getElementById("parcCount"),
+  list=document.getElementById("list"),drawerBar=document.getElementById("drawerBar");
+let lastRows=[],aTmr;
+function auto(){clearTimeout(aTmr);aTmr=setTimeout(run,450);}
+go.onclick=run;
+drawerBar.onclick=()=>{list.style.display=list.style.display==="block"?"none":"block";};
+
+function idle(t){go.disabled=false;goTx.textContent=t||"Voir les parcelles";}
+async function run(){
+  const gp=geoParams();
+  if(!gp){go.disabled=false;goTx.textContent="Cliquez sur la carte pour choisir la zone";dpeCount.textContent="0 DPE";parcCount.textContent="0 parcelles";return;}
+  go.disabled=true;goTx.innerHTML='<span class="spin"></span>Recherche…';
+  const params=new URLSearchParams();
+  params.set("size","1000");
+  if(gp.key)params.set(gp.key,gp.val);
+  params.set("select",SELECT);
+  let qs=buildQs();
+  if(gp.extraQs)qs=qs?qs+" AND "+gp.extraQs:gp.extraQs;
+  if(qs)params.set("qs",qs);
+  try{
+    const r=await fetch(ADEME+"?"+params.toString());const d=await r.json();
+    let rows=d.results||[];
+    let total=d.total||rows.length, approx=false;
+    if(gp.contains){const before=rows.length;rows=rows.filter(row=>{const g=(row._geopoint||"").split(",");return g.length===2&&gp.contains(+g[0],+g[1]);});
+      approx=true; total=total>before?Math.round(total*rows.length/Math.max(before,1)):rows.length;}
+    lastRows=rows;lastTotal=total;lastApprox=approx;render(total,approx);
+  }catch(e){dpeCount.textContent="Erreur ADEME";}
+  go.disabled=false;
+}
+
+/* ---------- toggles d'affichage (marqueurs DPE/GES, bâtiments, parcelles) ---------- */
+let markerMode="dpe", lastTotal=0, lastApprox=false;
+const GESC={A:"#3a9b6e",B:"#5fb37e",C:"#caa2cf",D:"#b483c6",E:"#9a5fb4",F:"#7b3f9e",G:"#5d2e86"};
+const buildings=L.tileLayer(wmts("BUILDINGS.BUILDINGS","image/png"),{maxZoom:20,opacity:.85});
+let seen=new Set();try{seen=new Set(JSON.parse(localStorage.getItem("dpe_seen")||"[]"));}catch(e){}
+function markSeen(id){if(!id)return;seen.add(id);try{localStorage.setItem("dpe_seen",JSON.stringify([...seen]));}catch(e){}}
+const disp={bati:false,baties:false,nus:false,vues:false};
+document.querySelectorAll('#display [data-m]').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#display [data-m]').forEach(x=>x.classList.remove("on"));b.classList.add("on");
+  markerMode=b.dataset.m;render(lastTotal,lastApprox);});
+document.querySelectorAll('#display [data-t]').forEach(b=>b.onclick=()=>{
+  const k=b.dataset.t;disp[k]=!disp[k];b.classList.toggle("on",disp[k]);
+  if(k==="bati"){disp.bati?buildings.addTo(map):map.removeLayer(buildings);}
+  else if(k==="vues"){render(lastTotal,lastApprox);}
+  else{styleParcels();}});
+function parcelBuilt(f){const rs=f.geometry?ringsFromGeo(f.geometry):[];
+  for(const row of lastRows){const p=(row._geopoint||"").split(",");if(p.length!==2)continue;
+    const la=+p[0],lo=+p[1];for(const ring of rs){if(pointInPoly(la,lo,ring))return true;}}return false;}
+function styleParcels(){
+  parcelGeo.eachLayer(l=>{
+    if(!disp.baties&&!disp.nus){l.setStyle({color:"#39e63a",fillColor:"#39e63a",fillOpacity:.05,opacity:1});return;}
+    const built=parcelBuilt(l.feature);
+    if(disp.baties&&!disp.nus)l.setStyle(built?{color:"#39e63a",fillColor:"#3aa0ff",fillOpacity:.28,opacity:1}:{opacity:0,fillOpacity:0});
+    else if(disp.nus&&!disp.baties)l.setStyle(!built?{color:"#ffd24d",fillColor:"#ffd24d",fillOpacity:.22,opacity:1}:{opacity:0,fillOpacity:0});
+    else l.setStyle(built?{color:"#39e63a",fillColor:"#3aa0ff",fillOpacity:.26,opacity:1}:{color:"#ffd24d",fillColor:"#ffd24d",fillOpacity:.2,opacity:1});
+  });
+}
+
+function render(total,approx){
+  markers.clearLayers();list.innerHTML="";
+  const parcels=new Set();let maj="";
+  lastRows.forEach(row=>{
+    const g=(row._geopoint||"").split(",");if(g.length!==2)return;
+    const lat=+g[0],lon=+g[1],id=row.identifiant_ban||row._geopoint;parcels.add(id);
+    if(row.date_etablissement_dpe>maj)maj=row.date_etablissement_dpe;
+    if(disp.vues&&!seen.has(id))return;                        // n'afficher que les parcelles déjà vues
+    const dpe=row.etiquette_dpe||"?",ges=row.etiquette_ges||"?";
+    const lab=markerMode==="ges"?ges:dpe, col=markerMode==="ges"?(GESC[ges]||"#888"):(C[dpe]||"#888");
+    const cls="pin"+(seen.has(id)?" seen":"");
+    const m=L.marker([lat,lon],{icon:L.divIcon({className:"",html:'<div class="'+cls+'" style="background:'+col+'">'+lab+'</div>',iconSize:[23,23]})}).addTo(markers);
+    m.bindPopup("<b>"+(row.adresse_ban||"Adresse inconnue")+"</b><br>"+(row.type_batiment||"")+" · "+(row.surface_habitable_logement||"?")+" m²<br>DPE <b>"+dpe+"</b> / GES <b>"+ges+"</b><br>Établi le "+fmt(row.date_etablissement_dpe)+"<br>N° "+(row.numero_dpe||""));
+    m.on("popupopen",()=>markSeen(id));
+    const it=document.createElement("div");it.className="item";
+    it.innerHTML='<div class="chip" style="background:'+(C[dpe]||"#888")+'">'+dpe+'</div><div style="flex:1;min-width:0"><div class="a">'+(row.adresse_ban||"Adresse inconnue")+'</div><div class="s">'+(row.type_batiment||"")+" · "+(row.surface_habitable_logement||"?")+' m² · GES <span class="ges" style="background:'+(C[ges]||"#888")+'">'+ges+"</span> · "+fmt(row.date_etablissement_dpe)+"</div></div>";
+    it.onclick=()=>{markSeen(id);map.setView([lat,lon],19);m.openPopup();};
+    list.appendChild(it);
+  });
+  if(parcelGeo.getLayers().length)styleParcels();
+  const shown=lastRows.length, capped=total>shown;
+  dpeCount.textContent=(approx?"≈":"")+total+" DPE"+(capped&&!approx?" (1000 affichés)":"");
+  parcCount.textContent=parcels.size+(capped?"+ ":" ")+"parcelles";
+  goTx.textContent="Voir les "+parcels.size+(capped?"+":"")+" parcelles";
+  document.getElementById("majAdeme").textContent=maj?fmt(maj):"—";
+}
+function fmt(d){if(!d)return"?";const p=(""+d).split("-");return p.length===3?p[2]+"/"+p[1]+"/"+p[0]:d;}
+
+/* ---------- reset ---------- */
+document.getElementById("reset").onclick=()=>location.reload();
+
+buildShape();
+dpeCount.textContent="—";parcCount.textContent="Recherchez une adresse ou une zone";goTx.textContent="Voir les parcelles";
+
+/* ---------- pré-remplissage depuis « Chercher sur DPE » (module Cadastre / Localiser) ----------
+   URL : prototype-dpe.html?loc=1&lat&lon&type=maison|appartement&s=<surface>&dpe=<lettre>&ges=<lettre>
+   Propose des comparables : surface ±10 %, même type, même étiquette DPE/GES, centré sur le bien. */
+(function dpeFromQuery(){
+  try{
+    var q=new URLSearchParams(location.search);
+    if(q.get("loc")!=="1")return;
+    var lat=parseFloat(q.get("lat")),lon=parseFloat(q.get("lon"));
+    var s=parseFloat(q.get("s")),ty=q.get("type")||"",dpe=(q.get("dpe")||"").toUpperCase(),ges=(q.get("ges")||"").toUpperCase();
+    if(s>0){document.getElementById("sMin").value=Math.round(s*0.9);document.getElementById("sMax").value=Math.round(s*1.1);}
+    if(ty){var tb=document.querySelector('#type button[data-t="'+ty+'"]');if(tb)tb.click();}
+    if(/^[A-G]$/.test(dpe)){var db=document.querySelector('#dpeLab button[data-v="'+dpe+'"]');if(db)db.click();}
+    if(/^[A-G]$/.test(ges)){var gb=document.querySelector('#gesLab button[data-v="'+ges+'"]');if(gb)gb.click();}
+    if(isFinite(lat)&&isFinite(lon)){center=[lat,lon];recenterTo(lat,lon,true);}
+  }catch(err){console.warn("DPE: initFromQuery",err);}
+})();
+</script>
+</body>
+</html>

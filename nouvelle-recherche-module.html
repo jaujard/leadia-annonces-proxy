@@ -409,11 +409,51 @@ function loadPortals(exp,a){
     if(zone)zone.innerHTML='<span class="lab">Disponible sur :</span>'+html;
   }).catch(()=>{});
 }
+/* ---------- Bouton « Localiser » (réplique cadastre.com) ----------
+   Libellé = précision de localisation : Rue (cercle 200 m) > Quartier (cercle 800 m) > Ville (commune).
+   Couleur = confiance : vert (fin + terrain connu) / ambre (moyen) / rouge (ville seule ou géoloc absente).
+   Au clic : ouvre le module Cadastre pré-rempli (terrain, emprise, zone selon précision) centré sur le bien. */
+const LOCCOL={ok:"#1f9d57",warn:"#c98a1e",bad:"#c0392b"};
+function locInfo(a){
+  const adr=((a.adresse||"")+" "+(a.description||"")).toLowerCase();
+  const street=/\b(rue|avenue|av\.|bd|boulevard|all[ée]e|impasse|chemin|place|quai|cours|route|passage|square|sentier|venelle|lotissement)\b/.test(adr);
+  const quartier=/\bquartier\b/.test(adr);
+  const hasGeo=isFinite(a.lat)&&isFinite(a.lon)&&!(+a.lat===0&&+a.lon===0);
+  let label,zone,rayon;
+  if(street&&hasGeo){label="Rue";zone="cercle";rayon=200;}
+  else if(quartier||hasGeo){label="Quartier";zone="cercle";rayon=800;}
+  else{label="Ville";zone="ville";rayon=0;}
+  const terrainOk=+a.terrain>0;
+  let color;
+  if(zone==="ville"||!hasGeo)color="bad";
+  else if(label==="Rue"&&terrainOk)color="ok";
+  else color="warn";
+  return {label,zone,rayon,color,tip:"Localiser le bien — précision "+label+(rayon?" (cercle "+rayon+" m)":" (commune)")};
+}
+function openLocaliser(a,li){
+  li=li||locInfo(a);
+  const p=new URLSearchParams();
+  p.set("loc","1");
+  if(isFinite(a.lat)&&isFinite(a.lon)){p.set("lat",a.lat);p.set("lon",a.lon);}
+  if(+a.terrain>0)p.set("t",Math.round(a.terrain));
+  if(+a.emprise>0)p.set("e",Math.round(a.emprise));
+  p.set("zone",li.zone);
+  if(li.rayon)p.set("r",li.rayon);
+  if(a.adresse)p.set("adr",a.adresse);
+  // contexte du bien transmis pour le bouton « Chercher sur DPE » du module Cadastre
+  if(+a.surface>0)p.set("s",Math.round(a.surface));
+  if(a.dpe)p.set("dpe",a.dpe);
+  if(a.ges)p.set("ges",a.ges);
+  const ty=/appart/i.test(a.type||"")?"appartement":(/maison/i.test(a.type||"")?"maison":"");
+  if(ty)p.set("ty",ty);
+  window.open("cadastre-module.html?"+p.toString(),"_blank","noopener");
+}
 function render(list){
   resEl.innerHTML="";
   if(!list.length){resEl.innerHTML='<div style="color:var(--muted);padding:30px;text-align:center">Aucune annonce. (Branchez votre API ou élargissez les filtres.)</div>';}
   list.forEach(a=>{
     const m2=a.surface?Math.round(a.prix/a.surface):null;
+    const li=locInfo(a);
     const c=document.createElement("div");c.className="card";
     const imgsAll=a.images||[];
     // toujours 4 vignettes + flèches ‹ › pour défiler (façon cadastre) ; cases vides = visuel "pas de photo".
@@ -425,9 +465,10 @@ function render(list){
      +'<div class="ph"><button class="navp prev" type="button">‹</button><div class="strip">'+slots+'</div><button class="navp next" type="button">›</button>'+(a.photos?'<span class="cnt">📷 '+a.photos+'</span>':'')+'</div>'
      +'<div class="act"><div class="agency">'+a.agence+'</div>'
        +'<div class="ico"><button class="fav'+(fav.has(a.id)?" on":"")+'" title="Favori">♥</button><button title="Téléphone">📞</button><button title="Masquer">🚫</button></div>'
-       +'<button class="a">📝 Notes</button><button class="a">🔎 Doublons</button><button class="a">🗺️ Quartier</button></div></div><div class="expand"></div>';
+       +'<button class="a">📝 Notes</button><button class="a">🔎 Doublons</button><button class="a loc" style="background:'+LOCCOL[li.color]+';color:#fff;border-color:transparent" title="'+li.tip+'">🗺️ '+li.label+'</button></div></div><div class="expand"></div>';
     const favBtn=c.querySelector(".fav");favBtn.onclick=()=>{fav.has(a.id)?fav.delete(a.id):fav.add(a.id);favBtn.classList.toggle("on");saveSets();};
     c.querySelectorAll(".ico button")[2].onclick=()=>{hid.add(a.id);saveSets();run();};
+    const locBtn=c.querySelector(".loc");if(locBtn)locBtn.onclick=()=>openLocaliser(a,li);
     const ph=c.querySelector(".ph");
     const slotEls=[...ph.querySelectorAll(".strip .slot")];
     const prevBtn=ph.querySelector(".navp.prev"),nextBtn=ph.querySelector(".navp.next");
