@@ -531,6 +531,17 @@ function render(){
   surfInfo.textContent=feats.length?("terrain moyen "+Math.round(sum/feats.length)+" m²"):"";
   pagerRefresh();
 }
+/* ⭐ Prospection partagée (localStorage["prospects"], même base que prospection-module.html) */
+function loadProsp(){try{return JSON.parse(localStorage.getItem("prospects")||"[]");}catch(e){return [];}}
+function saveProsp(a){try{localStorage.setItem("prospects",JSON.stringify(a));}catch(e){}}
+function hasProsp(ref){return loadProsp().some(p=>p.ref===ref);}
+function removeProsp(ref){saveProsp(loadProsp().filter(p=>p.ref!==ref));}
+function addParcelProsp(f,c,ref){
+  const p=f.properties;const arr=loadProsp();if(arr.some(x=>x.ref===ref))return;
+  const note="Parcelle "+(p.section||"")+" "+(p.numero||"")+" · "+(p.contenance||"?")+" m²"+(buildingsLoaded&&p._bati?" · bâti "+Math.round(p._bati)+" m²":"");
+  arr.push({id:Date.now()+Math.floor(Math.random()*1e4),ref,lat:c?c[0]:map.getCenter().lat,lon:c?c[1]:map.getCenter().lng,cat:"avendre",status:"a_prospecter",address:((p.nom_com||"")+" "+(p.section||"")+(p.numero||"")).trim(),contact:"",note,date:new Date().toISOString().slice(0,10)});
+  saveProsp(arr);
+}
 function openFiche(f){const p=f.properties;const c=centroid(f);
   const ba=Math.round(p._bati||0), nb=p._nbat||0, ter=+p.contenance||0;
   const emp=ter&&ba?(" ("+Math.round(ba/ter*100)+"% du terrain)"):"";
@@ -538,7 +549,11 @@ function openFiche(f){const p=f.properties;const c=centroid(f);
   if(buildingsLoaded)html+="<br>Emprise bâtie : <b>"+ba+" m²</b>"+emp+(nb?(" · "+nb+" bât.") : " (terrain nu)");
   if(poolsLoaded&&(p._pisc||0)>0)html+="<br>🏊 Piscine : <b>"+p._pisc+"</b> ("+Math.round(p._piscM2||0)+" m²)";
   html+="<br>Feuille : "+(p.feuille||"?")+"<br>IDU : "+(p.idu||"");
+  const ref="parcelle:"+(p.idu||((p.section||"")+(p.numero||"")+(p.code_insee||"")));
+  const on=hasProsp(ref);
+  html+='<br><button id="cadProsp" style="margin-top:8px;border:none;border-radius:7px;padding:7px 11px;font-size:12px;font-weight:700;cursor:pointer;background:'+(on?"#2f9e54":"#7c4dff")+';color:#fff">'+(on?"✓ En prospection":"📍 Ajouter à la prospection")+'</button>';
   L.popup({maxWidth:280}).setLatLng(c?[c[0],c[1]]:map.getCenter()).setContent(html).openOn(map);
+  setTimeout(()=>{const b=document.getElementById("cadProsp");if(b)b.onclick=()=>{if(hasProsp(ref))removeProsp(ref);else addParcelProsp(f,c,ref);openFiche(f);};},0);
 }
 document.getElementById("statsBtn").onclick=()=>{
   if(!feats.length){alert("Lancez d'abord une recherche dans une zone.");return;}

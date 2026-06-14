@@ -456,6 +456,18 @@ function openLocaliser(a,li){
   if(ty)p.set("ty",ty);
   window.open("cadastre-module.html?"+p.toString(),"_blank","noopener");
 }
+/* ⭐ Prospection partagée (localStorage["prospects"], même base que prospection-module.html) */
+function loadProsp(){try{return JSON.parse(localStorage.getItem("prospects")||"[]");}catch(e){return [];}}
+function saveProsp(a){try{localStorage.setItem("prospects",JSON.stringify(a));}catch(e){}}
+function hasProsp(ref){return loadProsp().some(p=>p.ref===ref);}
+function removeProsp(ref){saveProsp(loadProsp().filter(p=>p.ref!==ref));}
+function addAnnonceProsp(a,ref){
+  const arr=loadProsp();if(arr.some(p=>p.ref===ref))return;
+  const note=fmtE(a.prix)+" · "+(a.type||"")+(a.surface?" "+a.surface+" m²":"")+(a.pieces?" "+a.pieces+" p.":"")+(a.dpe?" · DPE "+a.dpe:"");
+  const addr=a.adresse||(((a.ville||"")+" "+(a.cp||"")).trim())||"Annonce";
+  arr.push({id:Date.now()+Math.floor(Math.random()*1e4),ref,lat:a.lat,lon:a.lon,cat:"avendre",status:"en_vente",address:addr,contact:"",note,date:new Date().toISOString().slice(0,10)});
+  saveProsp(arr);
+}
 function render(list){
   resEl.innerHTML="";
   if(!list.length){resEl.innerHTML='<div style="color:var(--muted);padding:30px;text-align:center">Aucune annonce. (Branchez votre API ou élargissez les filtres.)</div>';}
@@ -473,10 +485,23 @@ function render(list){
      +'<div class="ph"><button class="navp prev" type="button">‹</button><div class="strip">'+slots+'</div><button class="navp next" type="button">›</button>'+(a.photos?'<span class="cnt">📷 '+a.photos+'</span>':'')+'</div>'
      +'<div class="act"><div class="agency">'+a.agence+'</div>'
        +'<div class="ico"><button class="fav'+(fav.has(a.id)?" on":"")+'" title="Favori">♥</button><button title="Téléphone">📞</button><button title="Masquer">🚫</button></div>'
-       +'<button class="a">📝 Notes</button><button class="a">🔎 Doublons</button><button class="a loc" style="background:'+LOCCOL[li.color]+';color:#fff;border-color:transparent" title="'+li.tip+'">🗺️ '+li.label+'</button></div></div><div class="expand"></div>';
+       +'<button class="a">📝 Notes</button><button class="a">🔎 Doublons</button><button class="a loc" style="background:'+LOCCOL[li.color]+';color:#fff;border-color:transparent" title="'+li.tip+'">🗺️ '+li.label+'</button><button class="a prosp" title="Ajouter à la prospection (Biens à Vendre)">📍 Prospection</button></div></div><div class="expand"></div>';
     const favBtn=c.querySelector(".fav");favBtn.onclick=()=>{fav.has(a.id)?fav.delete(a.id):fav.add(a.id);favBtn.classList.toggle("on");saveSets();};
     c.querySelectorAll(".ico button")[2].onclick=()=>{hid.add(a.id);saveSets();run();};
     const locBtn=c.querySelector(".loc");if(locBtn)locBtn.onclick=()=>openLocaliser(a,li);
+    const prospBtn=c.querySelector(".prosp");
+    if(prospBtn){
+      const ref="annonce:"+a.id;
+      const refP=()=>{const on=hasProsp(ref);prospBtn.classList.toggle("on",on);
+        prospBtn.style.background=on?"#2f9e54":"";prospBtn.style.color=on?"#fff":"";prospBtn.style.borderColor=on?"transparent":"";
+        prospBtn.innerHTML=(on?"✓":"📍")+" Prospection";};
+      prospBtn.onclick=()=>{
+        if(hasProsp(ref)) removeProsp(ref);
+        else { if(a.lat==null||a.lon==null){alert("Annonce sans géolocalisation — impossible de la placer en prospection.");return;} addAnnonceProsp(a,ref); }
+        refP();
+      };
+      refP();
+    }
     const ph=c.querySelector(".ph");
     const slotEls=[...ph.querySelectorAll(".strip .slot")];
     const prevBtn=ph.querySelector(".navp.prev"),nextBtn=ph.querySelector(".navp.next");
