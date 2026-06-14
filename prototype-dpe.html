@@ -99,6 +99,34 @@
   #display .dot{width:9px;height:9px;border-radius:50%;background:#5a5470;flex:none}
   #display button.on .dot{background:var(--accent)}
   .pin.seen{filter:grayscale(.7);opacity:.55}
+  /* ---- panneau détail « DPE ADEME » (réplique cadastre : clic sur une lettre) ---- */
+  #dpePanel{position:absolute;top:14px;right:404px;width:374px;max-height:calc(100% - 28px);z-index:1300;
+    background:#efe9f7;border-radius:13px;box-shadow:0 16px 46px #000a;display:none;flex-direction:column;overflow:hidden}
+  #dpePanel .dpHead{background:#2f0a63;color:#fff;font-weight:700;font-size:14px;letter-spacing:.3px;
+    padding:13px 16px;display:flex;justify-content:space-between;align-items:center;flex:none}
+  #dpePanel .dpHead .x{cursor:pointer;font-size:15px;line-height:1;opacity:.85;padding:2px 4px;border-radius:6px}
+  #dpePanel .dpHead .x:hover{opacity:1;background:#ffffff22}
+  #dpeBody{padding:11px;overflow-y:auto}
+  #dpeBody::-webkit-scrollbar{width:9px}#dpeBody::-webkit-scrollbar-thumb{background:#c9b6ef;border-radius:9px;border:2px solid #efe9f7}
+  .dpCard{background:#fff;border:1px solid #cdbbef;border-radius:11px;padding:11px 14px 13px;margin-bottom:11px}
+  .dpCard:last-child{margin-bottom:0}
+  .dpRow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:4px 0;font-size:13px}
+  .dpRow .k{color:#6a6580;flex:none}
+  .dpRow .v{color:#1f1a2e;font-weight:600;text-align:right}
+  .dpBadges{display:flex;gap:6px}
+  .dpBadge{width:23px;height:23px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:#fff}
+  .dpAct{display:flex;gap:8px;align-items:center;margin-top:11px}
+  .dpAct button{font-family:inherit}
+  .dpAct .plus{flex:none;width:36px;height:36px;border-radius:50%;border:none;background:#7b2ff7;color:#fff;font-size:21px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .dpAct .plus.added{background:#16a34a}
+  .dpAct .ann{flex:none;display:flex;align-items:center;gap:6px;background:#ffb070;color:#7a3b00;border:none;border-radius:9px;padding:0 13px;height:36px;font-size:12.5px;font-weight:600;cursor:pointer}
+  .dpAct .ann:hover{background:#ffa257}
+  .dpAct .etat{flex:1;display:flex;align-items:center;justify-content:space-between;gap:6px;background:#e7e3ef;color:#8a8499;border:none;border-radius:9px;padding:0 12px;height:36px;font-size:12px;cursor:pointer}
+  .dpAct .etat.set{color:#1f1a2e;font-weight:600}
+  .dpMenu{position:absolute;z-index:1400;background:#fff;border:1px solid #cdbbef;border-radius:9px;box-shadow:0 10px 30px #0006;padding:5px;display:none;min-width:170px}
+  .dpMenu button{display:block;width:100%;text-align:left;background:none;border:none;padding:8px 10px;border-radius:6px;font-size:12.5px;color:#1f1a2e;cursor:pointer}
+  .dpMenu button:hover{background:#f1ecfa}
+  .dpMenu button .d{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:8px;vertical-align:0}
 </style>
 </head>
 <body>
@@ -240,6 +268,12 @@
     <div id="list"></div>
   </div>
 </div>
+
+<div id="dpePanel">
+  <div class="dpHead"><span>DPE ADEME</span><span class="x" id="dpeClose">✕</span></div>
+  <div id="dpeBody"></div>
+</div>
+<div class="dpMenu" id="dpMenu"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
@@ -547,22 +581,22 @@ function styleParcels(){
 }
 
 function render(total,approx){
-  markers.clearLayers();list.innerHTML="";
+  markers.clearLayers();list.innerHTML="";byId={};
   const parcels=new Set();let maj="";
   lastRows.forEach(row=>{
     const g=(row._geopoint||"").split(",");if(g.length!==2)return;
     const lat=+g[0],lon=+g[1],id=row.identifiant_ban||row._geopoint;parcels.add(id);
+    (byId[id]=byId[id]||{lat,lon,rows:[]}).rows.push(row);   // regroupe tous les DPE d'une même parcelle
     if(row.date_etablissement_dpe>maj)maj=row.date_etablissement_dpe;
     if(disp.vues&&!seen.has(id))return;                        // n'afficher que les parcelles déjà vues
     const dpe=row.etiquette_dpe||"?",ges=row.etiquette_ges||"?";
     const lab=markerMode==="ges"?ges:dpe, col=markerMode==="ges"?(GESC[ges]||"#888"):(C[dpe]||"#888");
     const cls="pin"+(seen.has(id)?" seen":"");
     const m=L.marker([lat,lon],{icon:L.divIcon({className:"",html:'<div class="'+cls+'" style="background:'+col+'">'+lab+'</div>',iconSize:[23,23]})}).addTo(markers);
-    m.bindPopup("<b>"+(row.adresse_ban||"Adresse inconnue")+"</b><br>"+(row.type_batiment||"")+" · "+(row.surface_habitable_logement||"?")+" m²<br>DPE <b>"+dpe+"</b> / GES <b>"+ges+"</b><br>Établi le "+fmt(row.date_etablissement_dpe)+"<br>N° "+(row.numero_dpe||""));
-    m.on("popupopen",()=>markSeen(id));
+    m.on("click",()=>openDpePanel(id));
     const it=document.createElement("div");it.className="item";
     it.innerHTML='<div class="chip" style="background:'+(C[dpe]||"#888")+'">'+dpe+'</div><div style="flex:1;min-width:0"><div class="a">'+(row.adresse_ban||"Adresse inconnue")+'</div><div class="s">'+(row.type_batiment||"")+" · "+(row.surface_habitable_logement||"?")+' m² · GES <span class="ges" style="background:'+(C[ges]||"#888")+'">'+ges+"</span> · "+fmt(row.date_etablissement_dpe)+"</div></div>";
-    it.onclick=()=>{markSeen(id);map.setView([lat,lon],19);m.openPopup();};
+    it.onclick=()=>openDpePanel(id);
     list.appendChild(it);
   });
   if(parcelGeo.getLayers().length)styleParcels();
@@ -573,6 +607,74 @@ function render(total,approx){
   document.getElementById("majAdeme").textContent=maj?fmt(maj):"—";
 }
 function fmt(d){if(!d)return"?";const p=(""+d).split("-");return p.length===3?p[2]+"/"+p[1]+"/"+p[0]:d;}
+
+/* ---------- panneau détail « DPE ADEME » (clic sur une lettre = réplique cadastre) ---------- */
+let byId={};
+const GBADGE={A:"#d5c3ea",B:"#c1a3df",C:"#ad84d2",D:"#9a66c6",E:"#854cb3",F:"#6f349f",G:"#561d80"};
+const FRMOIS=["janv.","févr.","mars","avr.","mai","juin","juil.","août","sept.","oct.","nov.","déc."];
+function frMois(d){if(!d)return"?";const p=(""+d).split("-");if(p.length!==3)return d;return (+p[2])+" "+(FRMOIS[(+p[1])-1]||p[1])+" "+p[0];}
+function cap(s){s=s||"";return s.charAt(0).toUpperCase()+s.slice(1);}
+const ETATS=[["",""],["a_prospecter","À prospecter","#9d96b0"],["contacte","Contacté","#4361ee"],["rdv","RDV pris","#f6b13b"],["mandat","En mandat","#2f9e41"],["abandonne","Abandonné","#e3151b"]];
+let etatStore={};try{etatStore=JSON.parse(localStorage.getItem("dpe_etat")||"{}");}catch(e){}
+const LOUPE='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>';
+const CHEV='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 9l6 6 6-6"/></svg>';
+const dpMenu=document.getElementById("dpMenu");
+function openDpePanel(id){
+  const grp=byId[id];if(!grp||!grp.rows.length)return;
+  markSeen(id);
+  try{map.setView([grp.lat,grp.lon],Math.max(map.getZoom(),18));}catch(e){}
+  const body=document.getElementById("dpeBody");body.innerHTML="";
+  grp.rows.forEach((row,i)=>{
+    const dpe=row.etiquette_dpe||"?",ges=row.etiquette_ges||"?";
+    const dCol=C[dpe]||"#888",gCol=GBADGE[ges]||"#888";
+    const dTx="ABCD".indexOf(dpe)>=0?"#1f1a2e":"#fff", gTx="AB".indexOf(ges)>=0?"#1f1a2e":"#fff";
+    const typ=(cap(row.type_batiment||"")+(row.surface_habitable_logement?" "+row.surface_habitable_logement+" m²":"")).trim()||"—";
+    const key=(row.numero_dpe||id+"#"+i);
+    const et=ETATS.find(e=>e[0]===etatStore[key]);
+    const card=document.createElement("div");card.className="dpCard";
+    card.innerHTML=
+      '<div class="dpRow"><span class="k">Type</span><span class="v">'+typ+'</span></div>'+
+      '<div class="dpRow"><span class="k">DPE / GES</span><span class="dpBadges">'+
+        '<span class="dpBadge" style="background:'+dCol+';color:'+dTx+'">'+dpe+'</span>'+
+        '<span class="dpBadge" style="background:'+gCol+';color:'+gTx+'">'+ges+'</span></span></div>'+
+      '<div class="dpRow"><span class="k">Date d\'établissement</span><span class="v">'+frMois(row.date_etablissement_dpe)+'</span></div>'+
+      '<div class="dpAct">'+
+        '<button class="plus" title="Ajouter à la prospection">+</button>'+
+        '<button class="ann" title="Voir les annonces correspondantes">'+LOUPE+'Annonces</button>'+
+        '<button class="etat'+(et&&et[0]?' set':'')+'"><span>'+(et&&et[1]?et[1]:"État de prospection")+'</span>'+CHEV+'</button>'+
+      '</div>';
+    const plus=card.querySelector(".plus");
+    plus.onclick=()=>{plus.classList.toggle("added");plus.textContent=plus.classList.contains("added")?"✓":"+";};
+    card.querySelector(".ann").onclick=()=>{
+      let u="nouvelle-recherche-module.html?dpepre=1";
+      const t=(row.type_batiment||"").toLowerCase();if(t)u+="&ty="+encodeURIComponent(t);
+      const s=parseFloat(row.surface_habitable_logement);if(s>0)u+="&smin="+Math.round(s*0.9)+"&smax="+Math.round(s*1.1);
+      if(/^[A-G]$/.test(dpe))u+="&dpe="+dpe;
+      if(/^[A-G]$/.test(ges))u+="&ges="+ges;
+      if(row.nom_commune_ban)u+="&ville="+encodeURIComponent(row.nom_commune_ban);
+      if(row.code_postal_ban)u+="&cp="+encodeURIComponent(row.code_postal_ban);
+      window.open(u,"_blank");
+    };
+    const etb=card.querySelector(".etat");
+    etb.onclick=(ev)=>{ev.stopPropagation();showEtatMenu(etb,key);};
+    body.appendChild(card);
+  });
+  document.getElementById("dpePanel").style.display="flex";
+}
+function showEtatMenu(anchor,key){
+  dpMenu.innerHTML="";
+  ETATS.filter(e=>e[0]).forEach(e=>{const b=document.createElement("button");
+    b.innerHTML='<span class="d" style="background:'+e[2]+'"></span>'+e[1];
+    b.onclick=()=>{etatStore[key]=e[0];try{localStorage.setItem("dpe_etat",JSON.stringify(etatStore));}catch(_){}
+      anchor.classList.add("set");anchor.querySelector("span").textContent=e[1];dpMenu.style.display="none";};
+    dpMenu.appendChild(b);});
+  const r=anchor.getBoundingClientRect();
+  dpMenu.style.display="block";
+  dpMenu.style.left=Math.max(8,Math.min(r.left,window.innerWidth-dpMenu.offsetWidth-8))+"px";
+  dpMenu.style.top=(r.bottom+4)+"px";
+}
+document.getElementById("dpeClose").onclick=()=>{document.getElementById("dpePanel").style.display="none";dpMenu.style.display="none";};
+document.addEventListener("click",e=>{if(!dpMenu.contains(e.target)&&!e.target.closest(".etat"))dpMenu.style.display="none";});
 
 /* ---------- reset ---------- */
 document.getElementById("reset").onclick=()=>location.reload();

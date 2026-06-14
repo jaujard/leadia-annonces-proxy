@@ -560,6 +560,24 @@ if(location.hash==="#ancien"){
   document.getElementById("tx").value="vente-ancien";
   const sv=document.querySelector(".saved");if(sv)sv.options[0].text="Annonces anciennes : Tours - 37000";
 }
+
+/* ---------- pré-remplissage depuis la loupe « Annonces » du panneau DPE ----------
+   URL : nouvelle-recherche-module.html?dpepre=1&ty=maison&smin=&smax=&ville=&cp=&dpe=&ges=
+   (ty/surface/ville sont appliqués ; dpe/ges sont passés mais ce module n'a pas de filtre étiquette UI) */
+(function dpePrefill(){
+  try{
+    const q=new URLSearchParams(location.search);
+    if(q.get("dpepre")!=="1")return;
+    const ty=(q.get("ty")||"").toLowerCase();
+    const MAP={maison:"Maison",appartement:"Appartement",immeuble:"Immeuble",terrain:"Terrain",parking:"Parking"};
+    const TY=MAP[ty];
+    if(TY){types.clear();document.querySelectorAll("#types button").forEach(b=>{const on=b.dataset.t===TY;b.classList.toggle("on",on);if(on)types.add(TY);});}
+    const smin=q.get("smin"),smax=q.get("smax");
+    if(smin)document.getElementById("hMin").value=smin;
+    if(smax)document.getElementById("hMax").value=smax;
+    const ville=q.get("ville");if(ville){locs=[ville];renderLoc();}
+  }catch(e){console.warn("dpePrefill",e);}
+})();
 run();
 </script>
 </body>
