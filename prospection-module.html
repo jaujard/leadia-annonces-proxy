@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Prospection (Cadastre par Leadia)</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  :root{--bg:#0d0b14;--panel:#15121d;--panel2:#221d30;--panel3:#2b2540;--border:#2c2640;--txt:#ece9f3;--muted:#9d96b0;--accent:#caa72f;--accent2:#3a6ff0;}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--txt);overflow:hidden}
+  #map{position:absolute;inset:0 392px 0 0}
+  #geo{position:absolute;top:14px;left:50%;transform:translateX(-50%);width:430px;z-index:1200;max-width:36vw}
+  #geo .box{display:flex;align-items:center;gap:8px;background:#15121dEE;border:1px solid var(--border);border-radius:11px;padding:10px 13px;box-shadow:0 6px 24px #0007}
+  #geo input{flex:1;background:none;border:none;outline:none;color:var(--txt);font-size:13.5px}
+  #suggest{margin-top:6px;background:#181423F2;border:1px solid var(--border);border-radius:11px;overflow:hidden;display:none}
+  #suggest div{padding:9px 14px;font-size:13px;cursor:pointer;border-bottom:1px solid #ffffff0d}#suggest div:hover{background:var(--panel3)}#suggest small{color:var(--muted)}
+  #basemap{position:absolute;top:14px;left:14px;z-index:1200;display:flex;background:#15121dEE;border:1px solid var(--border);border-radius:10px;padding:4px;gap:3px}
+  #basemap button{background:none;border:none;color:var(--muted);font-size:12.5px;padding:6px 12px;border-radius:7px;cursor:pointer}
+  #basemap button.on{background:var(--panel3);color:#fff;font-weight:600}
+  .home{position:absolute;top:14px;right:406px;z-index:1200;background:#15121dEE;border:1px solid var(--border);border-radius:9px;color:var(--txt);padding:8px 12px;font-size:12.5px;cursor:pointer;text-decoration:none}
+  #panel{position:absolute;top:0;right:0;width:392px;height:100%;background:var(--panel);border-left:1px solid var(--border);display:flex;flex-direction:column}
+  .cats{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:12px 14px;border-bottom:1px solid var(--border)}
+  .cat{display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--border);border-radius:9px;padding:8px 10px;font-size:12.5px;cursor:pointer;color:var(--txt)}
+  .cat .ic{width:18px;text-align:center}
+  .cat .n{flex:1}.cat .c{font-size:11px;font-weight:700;color:#fff;background:#3a3352;border-radius:10px;padding:1px 7px;min-width:20px;text-align:center}
+  .cat.on{border-color:var(--accent);background:#2a2410}
+  .scroll{flex:1;overflow-y:auto;padding:8px 14px 12px}
+  .scroll::-webkit-scrollbar{width:9px}.scroll::-webkit-scrollbar-thumb{background:#3a3352;border-radius:9px;border:2px solid var(--panel)}
+  .addzone{width:100%;border:none;border-radius:9px;padding:11px;font-size:13px;font-weight:700;color:#fff;background:var(--accent2);cursor:pointer;margin:6px 0 12px}
+  .addzone.on{background:#e8852f}
+  .sec{padding:11px 0;border-bottom:1px solid #ffffff0a}
+  .sec h3{margin:0 0 8px;font-size:12px;font-weight:600;color:#cfc9de}
+  .seg{display:flex;flex-wrap:wrap;gap:6px}
+  .seg button{flex:1 1 auto;min-width:54px;background:var(--panel2);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:7px 6px;font-size:12px;cursor:pointer}
+  .seg button.on{background:#f2e3b0;border-color:#f2e3b0;color:#6b5410;font-weight:600}
+  select.sel{width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--txt);border-radius:8px;padding:9px 10px;font-size:12.5px;margin-top:4px}
+  .status{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;margin-bottom:5px;cursor:pointer;font-size:12.5px;color:#10131a;font-weight:600;opacity:.45;border:2px solid transparent}
+  .status.on{opacity:1;border-color:#fff}
+  .status .c{margin-left:auto;font-size:11px;font-weight:800;background:#0003;border-radius:9px;padding:0 7px}
+  .foot{display:flex;gap:9px;padding:11px 14px;border-top:1px solid var(--border)}
+  .reset{flex:none;background:none;border:1px solid #5a2740;color:#ff6f9c;border-radius:9px;padding:11px 14px;font-size:12.5px;cursor:pointer;font-weight:600}
+  .go{flex:1;border:none;border-radius:9px;padding:11px;font-size:13.5px;font-weight:700;cursor:pointer;color:#fff;background:linear-gradient(90deg,#caa72f,#3a6ff0)}
+  #drawerBar{background:linear-gradient(90deg,#7a6320,#caa72f);padding:10px 14px;font-size:13px;font-weight:700;cursor:pointer;display:flex;justify-content:space-between}
+  #list{max-height:32vh;overflow-y:auto;display:none}
+  .item{padding:9px 14px;border-bottom:1px solid #ffffff0a;cursor:pointer;display:flex;gap:10px;align-items:center}
+  .item:hover{background:var(--panel2)}.item .dot{width:11px;height:11px;border-radius:50%;flex:none}
+  .item .a{font-size:12.5px;font-weight:600}.item .s{font-size:11px;color:var(--muted)}
+  .pin{width:24px;height:24px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 2px 5px #0007}
+  .leaflet-popup-content{font-size:12.5px;line-height:1.5}
+  .leaflet-popup-content select,.leaflet-popup-content button{font-size:12px;margin-top:5px}
+  .modal{position:absolute;inset:0;background:#000a;z-index:2000;display:none;align-items:center;justify-content:center}
+  .modal .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px;width:340px}
+  .modal h3{margin:0 0 12px;font-size:15px}
+  .modal label{display:block;font-size:11px;color:var(--muted);margin:9px 0 3px}
+  .modal input,.modal select,.modal textarea{width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--txt);border-radius:8px;padding:9px 10px;font-size:12.5px;outline:none}
+  .modal .btns{display:flex;gap:8px;margin-top:14px}
+  .modal .btns button{flex:1;border:none;border-radius:8px;padding:10px;font-size:13px;font-weight:600;cursor:pointer}
+  .save{background:var(--accent2);color:#fff}.cancel{background:var(--panel3);color:var(--txt)}
+  .hint{position:absolute;top:62px;left:50%;transform:translateX(-50%);z-index:1200;background:#e8852fEE;color:#fff;padding:7px 14px;border-radius:9px;font-size:12.5px;font-weight:600;display:none}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<a class="home" href="./menu-cadastre.html">← Menu</a>
+<div id="basemap"><button data-b="ign">IGN</button><button data-b="plan">Plan</button><button data-b="sat" class="on">Satellite</button></div>
+<div id="geo"><div class="box"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input id="geoIn" placeholder="Adresse, commune, N° parcelle…" autocomplete="off" /></div><div id="suggest"></div></div>
+<div class="hint" id="hint">📍 Cliquez sur la carte pour placer le prospect</div>
+
+<div id="panel">
+  <div class="cats" id="cats"></div>
+  <div class="scroll">
+    <button class="addzone" id="addBtn">➕ Ajouter un prospect</button>
+    <div class="sec">
+      <h3>📅 Date</h3>
+      <div class="seg" id="date"><button data-d="" class="on">Tout</button><button data-d="2024">2024</button><button data-d="2025">2025</button><button data-d="2026">2026</button><button data-d="mois">Mois</button></div>
+    </div>
+    <div class="sec">
+      <h3>🔗 Lié à une annonce</h3>
+      <div class="seg" id="lie"><button data-l="" class="on">Indifférent</button><button data-l="lie">Lié</button><button data-l="non">Non-Lié</button></div>
+    </div>
+    <div class="sec">
+      <h3>🏷️ Type de transaction</h3>
+      <select class="sel"><option>Tous</option><option>Vente</option><option>Location</option><option>Viager</option></select>
+    </div>
+    <div class="sec" style="border:none">
+      <h3>🎯 État de prospection</h3>
+      <div id="statuses"></div>
+    </div>
+  </div>
+  <div class="foot"><button class="reset" id="reset">Réinitialiser</button><button class="go" id="go">Voir les favoris</button></div>
+  <div><div id="drawerBar"><span id="cnt">0 favori</span><small id="sub"></small></div><div id="list"></div></div>
+</div>
+
+<div class="modal" id="modal"><div class="card">
+  <h3 id="mTitle">Nouveau prospect</h3>
+  <label>Catégorie</label><select id="mCat"></select>
+  <label>État de prospection</label><select id="mStatus"></select>
+  <label>Adresse</label><input id="mAddr" placeholder="Adresse" />
+  <label>Contact (nom / téléphone)</label><input id="mContact" placeholder="Ex : M. Martin · 06…" />
+  <label>Note</label><textarea id="mNote" rows="2" placeholder="Note libre"></textarea>
+  <div class="btns"><button class="cancel" id="mCancel">Annuler</button><button class="save" id="mSave">Enregistrer</button></div>
+</div></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const BAN="https://api-adresse.data.gouv.fr/search/", REV="https://api-adresse.data.gouv.fr/reverse/";
+function wmts(l,f){return "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER="+l+"&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT="+f;}
+const map=L.map("map",{zoomControl:true}).setView([46.6,2.4],6);
+const bases={ign:L.tileLayer(wmts("GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2","image/png"),{maxZoom:19}),plan:L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{maxZoom:20,subdomains:"abcd"}),sat:L.tileLayer(wmts("ORTHOIMAGERY.ORTHOPHOTOS","image/jpeg"),{maxZoom:20})};
+let curBase=bases.sat.addTo(map);
+document.querySelectorAll("#basemap button").forEach(b=>b.onclick=()=>{document.querySelectorAll("#basemap button").forEach(x=>x.classList.remove("on"));b.classList.add("on");map.removeLayer(curBase);curBase=bases[b.dataset.b].addTo(map);curBase.bringToBack();});
+const markers=L.layerGroup().addTo(map);
+
+const CATS=[
+ {k:"avendre",n:"À Vendre",ic:"📍"},{k:"customs",n:"Customs",ic:"📌"},
+ {k:"boitages",n:"Boîtages",ic:"✉️"},{k:"estimations",n:"Estimations",ic:"💶"},
+ {k:"contacts",n:"Contacts",ic:"👤"},{k:"dpe",n:"DPE",ic:"⚡"},
+ {k:"notes",n:"Notes, Photos, Doc.",ic:"📝"},{k:"zones",n:"Zones",ic:"▢"}];
+/* États alignés sur cadastre.com (mêmes clés que le panneau DPE → branchement partagé) */
+const STATUS=[
+ {k:"a_prospecter",n:"À Prospecter",c:"#f2c200"},
+ {k:"en_vente",n:"En Vente",c:"#2f9e54"},
+ {k:"vendu",n:"Vendu",c:"#6b7280"},
+ {k:"pas_interesse",n:"Pas Intéressé",c:"#e3151b"},
+ {k:"renovation",n:"Rénovation",c:"#8a8a2f"},
+ {k:"location",n:"Location",c:"#3a6ff0"},
+ {k:"autre",n:"Autre",c:"#9d96b0"}];
+const statusOf=k=>STATUS.find(s=>s.k===k)||STATUS[1];
+const catOf=k=>CATS.find(c=>c.k===k)||CATS[0];
+
+let prospects=[];try{prospects=JSON.parse(localStorage.getItem("prospects")||"[]");}catch(e){}
+function save(){localStorage.setItem("prospects",JSON.stringify(prospects));}
+
+/* catégories */
+let curCat="avendre";
+const catsEl=document.getElementById("cats");
+function renderCats(){catsEl.innerHTML="";CATS.forEach(c=>{const n=prospects.filter(p=>p.cat===c.k).length;
+  const d=document.createElement("div");d.className="cat"+(c.k===curCat?" on":"");
+  d.innerHTML='<span class="ic">'+c.ic+'</span><span class="n">'+c.n+'</span><span class="c">'+n+'</span>';
+  d.onclick=()=>{curCat=c.k;renderCats();render();};catsEl.appendChild(d);});}
+
+/* statuts (filtre) */
+const stEl=document.getElementById("statuses");const activeSt=new Set();
+STATUS.forEach(s=>{const d=document.createElement("div");d.className="status";d.style.background=s.c;
+  d.innerHTML='<span>'+s.n+'</span><span class="c" id="stc-'+s.k+'">0</span>';
+  d.onclick=()=>{d.classList.toggle("on");d.classList.contains("on")?activeSt.add(s.k):activeSt.delete(s.k);render();};
+  stEl.appendChild(d);});
+
+/* selects du modal */
+const mCat=document.getElementById("mCat"),mStatus=document.getElementById("mStatus");
+CATS.forEach(c=>mCat.add(new Option(c.n,c.k)));STATUS.forEach(s=>mStatus.add(new Option(s.n,s.k)));
+
+/* géolocalisateur */
+const geoIn=document.getElementById("geoIn"),sug=document.getElementById("suggest");let tmr;
+geoIn.addEventListener("input",()=>{clearTimeout(tmr);const q=geoIn.value.trim();if(q.length<3){sug.style.display="none";return;}tmr=setTimeout(async()=>{try{const r=await fetch(BAN+"?q="+encodeURIComponent(q)+"&limit=7&autocomplete=1");const d=await r.json();sug.innerHTML="";(d.features||[]).forEach(f=>{const div=document.createElement("div");const p=f.properties;div.innerHTML="<b>"+p.label+"</b>"+(p.context?" <small>· "+p.context+"</small>":"");div.onclick=()=>{geoIn.value=p.label;sug.style.display="none";map.setView([f.geometry.coordinates[1],f.geometry.coordinates[0]],16);};sug.appendChild(div);});sug.style.display=d.features&&d.features.length?"block":"none";}catch(e){}},250);});
+document.addEventListener("click",e=>{if(!document.getElementById("geo").contains(e.target))sug.style.display="none";});
+
+/* ajout d'un prospect */
+let addMode=false,pending=null;
+const addBtn=document.getElementById("addBtn"),hint=document.getElementById("hint"),modal=document.getElementById("modal");
+addBtn.onclick=()=>{addMode=!addMode;addBtn.classList.toggle("on",addMode);hint.style.display=addMode?"block":"none";addBtn.textContent=addMode?"✖ Annuler l'ajout":"➕ Ajouter un prospect";};
+map.on("click",async e=>{
+  if(!addMode)return;
+  addMode=false;addBtn.classList.remove("on");hint.style.display="none";addBtn.textContent="➕ Ajouter un prospect";
+  pending={lat:e.latlng.lat,lon:e.latlng.lng,id:Date.now()};
+  let addr="";try{const r=await fetch(REV+"?lon="+pending.lon+"&lat="+pending.lat);const d=await r.json();if(d.features&&d.features[0])addr=d.features[0].properties.label;}catch(_){}
+  document.getElementById("mTitle").textContent="Nouveau prospect";mCat.value=curCat;mStatus.value="a_prospecter";
+  document.getElementById("mAddr").value=addr;document.getElementById("mContact").value="";document.getElementById("mNote").value="";
+  modal.style.display="flex";
+});
+document.getElementById("mCancel").onclick=()=>{modal.style.display="none";pending=null;};
+document.getElementById("mSave").onclick=()=>{
+  if(!pending)return;
+  prospects.push({id:pending.id,lat:pending.lat,lon:pending.lon,cat:mCat.value,status:mStatus.value,
+    address:document.getElementById("mAddr").value,contact:document.getElementById("mContact").value,
+    note:document.getElementById("mNote").value,date:new Date().toISOString().slice(0,10)});
+  save();modal.style.display="none";pending=null;curCat=mCat.value;renderCats();render();
+};
+function editProspect(id){const p=prospects.find(x=>x.id===id);if(!p)return;pending={lat:p.lat,lon:p.lon,id:p.id};
+  document.getElementById("mTitle").textContent="Modifier le prospect";mCat.value=p.cat;mStatus.value=p.status;
+  document.getElementById("mAddr").value=p.address||"";document.getElementById("mContact").value=p.contact||"";document.getElementById("mNote").value=p.note||"";
+  prospects=prospects.filter(x=>x.id!==id);modal.style.display="flex";}
+function delProspect(id){prospects=prospects.filter(x=>x.id!==id);save();renderCats();render();}
+window.editProspect=editProspect;window.delProspect=delProspect;
+
+/* filtres date/lié */
+function seg(id){let v="";document.querySelectorAll("#"+id+" button").forEach(b=>b.onclick=()=>{document.querySelectorAll("#"+id+" button").forEach(x=>x.classList.remove("on"));b.classList.add("on");v=b.dataset[id==="date"?"d":"l"];render();});return ()=>v;}
+const getDate=seg("date"),getLie=seg("lie");
+
+/* rendu */
+const cnt=document.getElementById("cnt"),sub=document.getElementById("sub"),list=document.getElementById("list"),drawerBar=document.getElementById("drawerBar");
+drawerBar.onclick=()=>{list.style.display=list.style.display==="block"?"none":"block";};
+document.getElementById("go").onclick=()=>{list.style.display="block";};
+document.getElementById("reset").onclick=()=>{activeSt.clear();document.querySelectorAll(".status").forEach(s=>s.classList.remove("on"));[["date"],["lie"]].forEach(([id])=>{const bs=document.querySelectorAll("#"+id+" button");bs.forEach(x=>x.classList.remove("on"));bs[0].classList.add("on");});render();};
+
+function passFilters(p){
+  if(p.cat!==curCat)return false;
+  if(activeSt.size&&!activeSt.has(p.status))return false;
+  const dd=getDate();if(dd){if(dd==="mois"){const m=new Date();m.setMonth(m.getMonth()-1);if(p.date<m.toISOString().slice(0,10))return false;}else if(!(p.date||"").startsWith(dd))return false;}
+  return true;
+}
+function render(){
+  markers.clearLayers();list.innerHTML="";
+  STATUS.forEach(s=>{const el=document.getElementById("stc-"+s.k);if(el)el.textContent=prospects.filter(p=>p.cat===curCat&&p.status===s.k).length;});
+  const shown=prospects.filter(passFilters);
+  shown.forEach(p=>{const s=statusOf(p.status);
+    L.marker([p.lat,p.lon],{icon:L.divIcon({className:"",html:'<div class="pin" style="background:'+s.c+'"></div>',iconSize:[24,24],iconAnchor:[12,24]})}).addTo(markers)
+     .bindPopup('<b>'+(p.address||"Sans adresse")+'</b><br><span style="color:'+s.c+';font-weight:700">'+s.n+'</span>'+(p.contact?"<br>📞 "+p.contact:"")+(p.note?"<br>📝 "+p.note:"")+'<br><small>'+catOf(p.cat).n+" · "+(p.date||"")+'</small><br><button onclick="editProspect('+p.id+')">Modifier</button> <button onclick="delProspect('+p.id+')">Supprimer</button>');
+    const it=document.createElement("div");it.className="item";
+    it.innerHTML='<span class="dot" style="background:'+s.c+'"></span><div style="flex:1;min-width:0"><div class="a">'+(p.address||"Sans adresse")+'</div><div class="s">'+s.n+(p.contact?" · "+p.contact:"")+'</div></div>';
+    it.onclick=()=>{map.setView([p.lat,p.lon],18);};
+    list.appendChild(it);});
+  if(shown.length){const b=L.latLngBounds(shown.map(p=>[p.lat,p.lon]));try{map.fitBounds(b,{padding:[60,60],maxZoom:16});}catch(e){}}
+  cnt.textContent=shown.length+" favori"+(shown.length>1?"s":"");
+  sub.textContent=catOf(curCat).n;
+}
+renderCats();render();
+if(!prospects.length){cnt.textContent="0 favori";sub.textContent="Cliquez « Ajouter un prospect » puis sur la carte";}
+</script>
+</body>
+</html>

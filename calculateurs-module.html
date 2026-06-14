@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Calculatrice (Cadastre par Leadia)</title>
+<style>
+  :root{--bg:#eef1f6;--card:#ffffff;--ink:#1d2330;--muted:#6b7280;--border:#e2e6ee;--accent:#3a6ff0;--accent2:#2f9e54;--soft:#f4f6fb;}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+  header{display:flex;align-items:center;justify-content:space-between;padding:12px 18px;background:#fff;border-bottom:1px solid var(--border)}
+  header .ttl{font-size:15px;font-weight:700}
+  header a{font-size:12.5px;color:var(--accent);text-decoration:none}
+  .wrap{display:flex;height:calc(100vh - 49px)}
+  .main{flex:1;overflow-y:auto;padding:26px 30px}
+  .side{width:320px;border-left:1px solid var(--border);background:#fff;overflow-y:auto;padding:12px}
+  .side .c{display:flex;gap:11px;align-items:flex-start;padding:11px 12px;border-radius:11px;cursor:pointer;border:1px solid transparent}
+  .side .c:hover{background:var(--soft)}
+  .side .c.on{background:var(--accent);color:#fff}
+  .side .c .ic{width:30px;height:30px;border-radius:8px;background:var(--soft);display:flex;align-items:center;justify-content:center;font-size:16px;flex:none}
+  .side .c.on .ic{background:#ffffff33}
+  .side .c .n{font-size:13px;font-weight:600}.side .c .d{font-size:11px;color:var(--muted)}.side .c.on .d{color:#ffffffcc}
+  h1{font-size:20px;margin:0 0 2px}.sub{color:var(--muted);font-size:13px;margin-bottom:20px}
+  .cards{display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;width:380px;box-shadow:0 2px 10px #0000000a}
+  .card h2{font-size:14px;margin:0 0 16px}
+  .f{margin-bottom:13px}
+  .f label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}
+  .ib{position:relative}
+  .ib input,.ib select{width:100%;background:var(--soft);border:1px solid var(--border);border-radius:9px;padding:10px 38px 10px 12px;font-size:14px;color:var(--ink);outline:none}
+  .ib input:focus{border-color:var(--accent)}
+  .ib .u{position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--muted)}
+  .res{margin-top:6px;border-top:1px solid var(--border);padding-top:12px}
+  .res .r{display:flex;justify-content:space-between;font-size:13px;padding:5px 0;color:#374151}
+  .res .r b{font-weight:600}
+  .res .r.big{font-size:16px;font-weight:800;border-top:1px solid var(--border);margin-top:6px;padding-top:11px;color:var(--ink)}
+  .res .r.big .v{color:var(--accent)}
+  .note{font-size:11px;color:var(--muted);margin-top:12px;line-height:1.5}
+  .seg{display:flex;gap:6px;margin-bottom:13px}
+  .seg button{flex:1;background:var(--soft);border:1px solid var(--border);border-radius:8px;padding:9px;font-size:12.5px;cursor:pointer;color:#374151}
+  .seg button.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+</style>
+</head>
+<body>
+<header>
+  <div class="ttl">🧮 Calculatrice</div>
+  <a href="./menu-cadastre.html">← Menu</a>
+</header>
+<div class="wrap">
+  <div class="main" id="main"></div>
+  <div class="side" id="side"></div>
+</div>
+
+<script>
+const E=n=>isFinite(n)?Math.round(n).toLocaleString("fr-FR")+" €":"—";
+const P=n=>isFinite(n)?n.toFixed(2).replace(".",",")+" %":"—";
+function mensualite(C,tauxAn,ans){const n=ans*12,r=tauxAn/100/12;return r?C*r/(1-Math.pow(1+r,-n)):C/n;}
+function capacite(mens,tauxAn,ans){const n=ans*12,r=tauxAn/100/12;return r?mens*(1-Math.pow(1+r,-n))/r:mens*n;}
+
+const CALCS=[
+{k:"credit",ic:"💳",n:"Coût du crédit",d:"Estimez le coût total du crédit",seg:null,
+ fields:[["montant","Montant emprunté","€",200000],["taux","Taux d'intérêt","%/an",3.5],["duree","Durée","ans",20],["assurance","Assurance","%/an",0.34]],
+ calc:v=>{const mens=mensualite(v.montant,v.taux,v.duree),ass=v.montant*(v.assurance/100)/12,n=v.duree*12;
+  const int=mens*n-v.montant,tass=ass*n;
+  return [["Mensualité (hors assurance)",E(mens)],["Assurance / mois",E(ass)],["Mensualité totale",E(mens+ass),1],
+   ["Coût des intérêts",E(int)],["Coût de l'assurance",E(tass)],["Coût total du crédit",E(int+tass),1],["Total remboursé",E(v.montant+int+tass)]];}},
+
+{k:"capacite",ic:"📊",n:"Capacité d'emprunt",d:"Estimez la capacité d'emprunt",seg:null,
+ fields:[["revenus","Revenus nets","€/mois",4000],["charges","Charges (crédits en cours)","€/mois",0],["endettement","Taux d'endettement max","%",35],["taux","Taux d'intérêt","%/an",3.5],["duree","Durée","ans",20],["apport","Apport","€",30000]],
+ calc:v=>{const mensMax=Math.max(0,v.revenus*v.endettement/100-v.charges),cap=capacite(mensMax,v.taux,v.duree);
+  return [["Mensualité maximale",E(mensMax)],["Capacité d'emprunt",E(cap),1],["+ Apport",E(v.apport)],["Budget total",E(cap+v.apport),1]];}},
+
+{k:"honoraires",ic:"🤝",n:"Honoraires d'Agence",d:"Estimez les honoraires et le prix net",seg:null,
+ fields:[["net","Prix net vendeur","€",250000],["pct","Honoraires","%",5]],
+ calc:v=>{const h=v.net*v.pct/100,fai=v.net+h;return [["Honoraires d'agence",E(h),1],["Prix FAI (affiché)",E(fai),1],["Honoraires / prix FAI",P(fai?h/fai*100:0)]];}},
+
+{k:"notaire",ic:"⚖️",n:"Frais de Notaire",d:"Évaluez les coûts d'acquisition",
+ seg:["pct",[["Ancien",8],["Neuf",2.5]]],
+ fields:[["prix","Prix d'achat","€",250000],["mobilier","Mobilier déductible","€",0],["pct","Frais de notaire","%",8],["comm","Commission d'agence","%",0]],
+ calc:v=>{const base=Math.max(0,v.prix-v.mobilier),fn=base*v.pct/100,ho=v.prix*v.comm/100;
+  return [["Frais de notaire",E(fn),1],["Honoraires d'agence",E(ho)],["Prix total d'acquisition",E(v.prix+fn),1]];}},
+
+{k:"financement",ic:"🏦",n:"Financement",d:"Coût total et mensualités",seg:null,
+ fields:[["prix","Prix du bien","€",250000],["apport","Apport","€",30000],["taux","Taux d'intérêt","%/an",3.5],["duree","Durée","ans",20],["assurance","Assurance","%/an",0.34]],
+ calc:v=>{const C=Math.max(0,v.prix-v.apport),mens=mensualite(C,v.taux,v.duree),ass=C*(v.assurance/100)/12,n=v.duree*12,cout=mens*n-C+ass*n;
+  return [["Montant emprunté",E(C),1],["Mensualité (hors ass.)",E(mens)],["Mensualité totale",E(mens+ass),1],["Coût du crédit",E(cout)],["Coût total de l'opération",E(v.prix+cout)]];}},
+
+{k:"locatif",ic:"🏘️",n:"Investissement locatif",d:"Simulez la rentabilité locative",seg:null,
+ fields:[["prix","Prix d'achat","€",150000],["frais","Frais (notaire+travaux)","€",18000],["loyer","Loyer","€/mois",650],["charges","Charges annuelles","€/an",1200],["taxe","Taxe foncière","€/an",900]],
+ calc:v=>{const la=v.loyer*12,inv=v.prix+v.frais,brute=v.prix?la/v.prix*100:0,net=la-v.charges-v.taxe,nette=inv?net/inv*100:0;
+  return [["Loyer annuel",E(la)],["Rentabilité brute",P(brute),1],["Rentabilité nette",P(nette),1],["Cash-flow annuel",E(net)],["Cash-flow mensuel",E(net/12)]];}},
+
+{k:"tva",ic:"🧾",n:"TVA",d:"Calculez le prix TTC ou HT",
+ seg:["sens",[["HT → TTC","ht"],["TTC → HT","ttc"]]],
+ fields:[["montant","Montant","€",100000],["taux","Taux de TVA","%",20],["sens","Sens","",0]],
+ calc:v=>{const t=v.taux/100;let ht,ttc;if(v.sens==="ttc"){ttc=v.montant;ht=ttc/(1+t);}else{ht=v.montant;ttc=ht*(1+t);}
+  return [["Prix HT",E(ht),1],["TVA ("+v.taux+" %)",E(ttc-ht)],["Prix TTC",E(ttc),1]];}},
+
+{k:"plusvalue",ic:"📈",n:"Plus-value",d:"Calculez la plus-value de votre bien",seg:null,
+ fields:[["achat","Prix d'achat","€",150000],["fraisA","Frais d'acquisition (0 = forfait 7,5 %)","€",0],["travaux","Travaux (0 = forfait 15 % si >5 ans)","€",0],["vente","Prix de vente","€",250000],["fraisV","Frais de vente","€",0],["duree","Durée de détention","ans",10]],
+ calc:v=>{const fA=v.fraisA>0?v.fraisA:v.achat*0.075,tr=v.travaux>0?v.travaux:(v.duree>5?v.achat*0.15:0);
+  const base=v.achat+fA+tr,pv=Math.max(0,(v.vente-v.fraisV)-base);
+  const d=v.duree;let aIR=d<=5?0:d<=21?(d-5)*6:d>=22?100:0;if(d>21&&d<22)aIR=96;if(d===22)aIR=100;
+  let aPS=d<=5?0:d<=21?(d-5)*1.65:d>=30?100:28+(d-22)*9;if(d===22)aPS=28;
+  aIR=Math.min(100,aIR);aPS=Math.min(100,aPS);
+  const pvIR=pv*(1-aIR/100),pvPS=pv*(1-aPS/100),iIR=pvIR*0.19,iPS=pvPS*0.172,imp=iIR+iPS;
+  return [["Plus-value brute",E(pv),1],["Abattement IR",P(aIR)],["Abattement prélèv. sociaux",P(aPS)],["Impôt IR (19 %)",E(iIR)],["Prélèvements sociaux (17,2 %)",E(iPS)],["Impôt total",E(imp),1],["Plus-value nette",E(pv-imp),1]];}}
+];
+
+let cur=CALCS[0], vals={};
+const side=document.getElementById("side"),main=document.getElementById("main");
+function renderSide(){side.innerHTML="";CALCS.forEach(c=>{const d=document.createElement("div");d.className="c"+(c.k===cur.k?" on":"");
+  d.innerHTML='<div class="ic">'+c.ic+'</div><div><div class="n">'+c.n+'</div><div class="d">'+c.d+'</div></div>';
+  d.onclick=()=>{cur=c;initVals();renderMain();renderSide();};side.appendChild(d);});}
+function initVals(){vals={};cur.fields.forEach(f=>vals[f[0]]=f[3]);if(cur.seg){const sk=cur.seg[0];vals[sk]=cur.seg[1][0][1];}}
+function renderMain(){
+  main.innerHTML="";
+  const h=document.createElement("div");h.innerHTML='<h1>'+cur.n+'</h1><div class="sub">'+cur.d+'</div>';main.appendChild(h);
+  const cards=document.createElement("div");cards.className="cards";main.appendChild(cards);
+  const card=document.createElement("div");card.className="card";cards.appendChild(card);
+  if(cur.seg){const sk=cur.seg[0];const seg=document.createElement("div");seg.className="seg";
+    cur.seg[1].forEach(([lbl,val])=>{const b=document.createElement("button");b.textContent=lbl;b.className=vals[sk]===val?"on":"";
+      b.onclick=()=>{vals[sk]=val;if(sk==="pct")vals.pct=val;renderMain();};seg.appendChild(b);});card.appendChild(seg);}
+  cur.fields.forEach(f=>{const[k,label,unit]=f;if(cur.seg&&k===cur.seg[0])return;
+    const wrap=document.createElement("div");wrap.className="f";
+    wrap.innerHTML='<label>'+label+'</label><div class="ib"><input type="number" id="in-'+k+'" value="'+vals[k]+'">'+(unit?'<span class="u">'+unit+'</span>':'')+'</div>';
+    card.appendChild(wrap);});
+  const res=document.createElement("div");res.className="res";res.id="res";card.appendChild(res);
+  cur.fields.forEach(f=>{const k=f[0];const el=document.getElementById("in-"+k);if(el)el.addEventListener("input",()=>{vals[k]=parseFloat(el.value)||0;compute();});});
+  if(cur.note){const nn=document.createElement("div");nn.className="note";nn.textContent=cur.note;card.appendChild(nn);}
+  compute();
+}
+function compute(){const rows=cur.calc(vals);const res=document.getElementById("res");
+  res.innerHTML=rows.map(r=>'<div class="r'+(r[2]?" big":"")+'"><span>'+r[0]+'</span><span class="v"><b>'+r[1]+'</b></span></div>').join("");}
+initVals();renderSide();renderMain();
+</script>
+</body>
+</html>

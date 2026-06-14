@@ -614,8 +614,31 @@ const GBADGE={A:"#d5c3ea",B:"#c1a3df",C:"#ad84d2",D:"#9a66c6",E:"#854cb3",F:"#6f
 const FRMOIS=["janv.","févr.","mars","avr.","mai","juin","juil.","août","sept.","oct.","nov.","déc."];
 function frMois(d){if(!d)return"?";const p=(""+d).split("-");if(p.length!==3)return d;return (+p[2])+" "+(FRMOIS[(+p[1])-1]||p[1])+" "+p[0];}
 function cap(s){s=s||"";return s.charAt(0).toUpperCase()+s.slice(1);}
-const ETATS=[["",""],["a_prospecter","À prospecter","#9d96b0"],["contacte","Contacté","#4361ee"],["rdv","RDV pris","#f6b13b"],["mandat","En mandat","#2f9e41"],["abandonne","Abandonné","#e3151b"]];
-let etatStore={};try{etatStore=JSON.parse(localStorage.getItem("dpe_etat")||"{}");}catch(e){}
+/* États de prospection = liste exacte de cadastre.com (catégorie DPE) */
+const ETATS=[
+ ["a_prospecter","À Prospecter","#f2c200"],
+ ["en_vente","En Vente","#2f9e54"],
+ ["vendu","Vendu","#6b7280"],
+ ["pas_interesse","Pas Intéressé","#e3151b"],
+ ["renovation","Rénovation","#8a8a2f"],
+ ["location","Location","#3a6ff0"],
+ ["autre","Autre","#9d96b0"]
+];
+const etatOf=k=>ETATS.find(e=>e[0]===k);
+/* ⭐ BRANCHEMENT PROSPECTION : on écrit dans le localStorage["prospects"] PARTAGÉ
+   (même clé/format que prospection-module.html) → le DPE apparaît dans « Mes DPE ». */
+function loadProsp(){try{return JSON.parse(localStorage.getItem("prospects")||"[]");}catch(e){return [];}}
+function saveProsp(a){try{localStorage.setItem("prospects",JSON.stringify(a));}catch(e){}}
+function prospOf(ref){return loadProsp().find(p=>p.ref===ref)||null;}
+function upsertProsp(row,grp,ref,status){
+  const arr=loadProsp();let p=arr.find(x=>x.ref===ref);
+  const note="DPE "+(row.etiquette_dpe||"?")+" / GES "+(row.etiquette_ges||"?")+" · "+cap(row.type_batiment||"")+(row.surface_habitable_logement?" "+row.surface_habitable_logement+" m²":"")+" · établi "+frMois(row.date_etablissement_dpe)+(row.numero_dpe?" · N° "+row.numero_dpe:"");
+  const addr=row.adresse_ban||(((row.code_postal_ban||"")+" "+(row.nom_commune_ban||"")).trim())||"Adresse inconnue";
+  if(p){p.status=status;p.note=note;p.address=addr;p.lat=grp.lat;p.lon=grp.lon;}
+  else arr.push({id:Date.now()+Math.floor(Math.random()*1e4),ref,lat:grp.lat,lon:grp.lon,cat:"dpe",status,address:addr,contact:"",note,date:new Date().toISOString().slice(0,10)});
+  saveProsp(arr);
+}
+function removeProsp(ref){saveProsp(loadProsp().filter(p=>p.ref!==ref));}
 const LOUPE='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>';
 const CHEV='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 9l6 6 6-6"/></svg>';
 const dpMenu=document.getElementById("dpMenu");
@@ -629,8 +652,7 @@ function openDpePanel(id){
     const dCol=C[dpe]||"#888",gCol=GBADGE[ges]||"#888";
     const dTx="ABCD".indexOf(dpe)>=0?"#1f1a2e":"#fff", gTx="AB".indexOf(ges)>=0?"#1f1a2e":"#fff";
     const typ=(cap(row.type_batiment||"")+(row.surface_habitable_logement?" "+row.surface_habitable_logement+" m²":"")).trim()||"—";
-    const key=(row.numero_dpe||id+"#"+i);
-    const et=ETATS.find(e=>e[0]===etatStore[key]);
+    const ref="dpe:"+(row.numero_dpe||(id+"#"+i));
     const card=document.createElement("div");card.className="dpCard";
     card.innerHTML=
       '<div class="dpRow"><span class="k">Type</span><span class="v">'+typ+'</span></div>'+
@@ -639,12 +661,19 @@ function openDpePanel(id){
         '<span class="dpBadge" style="background:'+gCol+';color:'+gTx+'">'+ges+'</span></span></div>'+
       '<div class="dpRow"><span class="k">Date d\'établissement</span><span class="v">'+frMois(row.date_etablissement_dpe)+'</span></div>'+
       '<div class="dpAct">'+
-        '<button class="plus" title="Ajouter à la prospection">+</button>'+
+        '<button class="plus" title="Ajouter / retirer de la prospection">+</button>'+
         '<button class="ann" title="Voir les annonces correspondantes">'+LOUPE+'Annonces</button>'+
-        '<button class="etat'+(et&&et[0]?' set':'')+'"><span>'+(et&&et[1]?et[1]:"État de prospection")+'</span>'+CHEV+'</button>'+
+        '<button class="etat"><span>État de prospection</span>'+CHEV+'</button>'+
       '</div>';
-    const plus=card.querySelector(".plus");
-    plus.onclick=()=>{plus.classList.toggle("added");plus.textContent=plus.classList.contains("added")?"✓":"+";};
+    const plus=card.querySelector(".plus"), etb=card.querySelector(".etat");
+    function refresh(){
+      const p=prospOf(ref);
+      plus.classList.toggle("added",!!p);plus.textContent=p?"✓":"+";
+      const e=p?etatOf(p.status):null;
+      etb.classList.toggle("set",!!e);
+      etb.querySelector("span").textContent=e?e[1]:"État de prospection";
+    }
+    plus.onclick=()=>{ if(prospOf(ref)) removeProsp(ref); else upsertProsp(row,grp,ref,"a_prospecter"); refresh(); };
     card.querySelector(".ann").onclick=()=>{
       let u="nouvelle-recherche-module.html?dpepre=1";
       const t=(row.type_batiment||"").toLowerCase();if(t)u+="&ty="+encodeURIComponent(t);
@@ -655,18 +684,17 @@ function openDpePanel(id){
       if(row.code_postal_ban)u+="&cp="+encodeURIComponent(row.code_postal_ban);
       window.open(u,"_blank");
     };
-    const etb=card.querySelector(".etat");
-    etb.onclick=(ev)=>{ev.stopPropagation();showEtatMenu(etb,key);};
+    etb.onclick=(ev)=>{ev.stopPropagation();showEtatMenu(etb,row,grp,ref,refresh);};
+    refresh();
     body.appendChild(card);
   });
   document.getElementById("dpePanel").style.display="flex";
 }
-function showEtatMenu(anchor,key){
+function showEtatMenu(anchor,row,grp,ref,refresh){
   dpMenu.innerHTML="";
-  ETATS.filter(e=>e[0]).forEach(e=>{const b=document.createElement("button");
+  ETATS.forEach(e=>{const b=document.createElement("button");
     b.innerHTML='<span class="d" style="background:'+e[2]+'"></span>'+e[1];
-    b.onclick=()=>{etatStore[key]=e[0];try{localStorage.setItem("dpe_etat",JSON.stringify(etatStore));}catch(_){}
-      anchor.classList.add("set");anchor.querySelector("span").textContent=e[1];dpMenu.style.display="none";};
+    b.onclick=()=>{upsertProsp(row,grp,ref,e[0]);refresh();dpMenu.style.display="none";};
     dpMenu.appendChild(b);});
   const r=anchor.getBoundingClientRect();
   dpMenu.style.display="block";

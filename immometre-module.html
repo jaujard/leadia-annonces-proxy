@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Immo Stats (Cadastre par Leadia)</title>
+<style>
+  :root{--bg:#0d0b14;--panel:#15121d;--panel2:#221d30;--panel3:#2b2540;--border:#2c2640;--txt:#ece9f3;--muted:#9d96b0;--accent:#7c5cff;--accent2:#3a6ff0;}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--txt);overflow:hidden}
+  .top{height:46px;display:flex;align-items:center;gap:12px;padding:0 16px;border-bottom:1px solid var(--border);background:var(--panel)}
+  .top .t{font-weight:700;font-size:14px}.top a{margin-left:auto;color:var(--muted);text-decoration:none;font-size:12.5px}
+  .wrap{display:flex;height:calc(100vh - 46px)}
+  .stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:20px;background:radial-gradient(700px 400px at 50% 0%,#1a1730,transparent)}
+  .panel{width:380px;flex:none;border-left:1px solid var(--border);background:var(--panel);overflow-y:auto;padding:18px}
+  .ptop{padding:10px 0 14px;border-bottom:1px solid var(--border);display:flex;gap:8px}
+  .ptop input{flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--txt);padding:8px 10px;font-size:12.5px;outline:none}
+  .ptop button{background:var(--panel2);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:8px 12px;font-size:12px;cursor:pointer}
+  label{display:block;font-size:11px;color:var(--muted);margin:13px 0 5px}
+  input,select{width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--txt);border-radius:8px;padding:10px;font-size:13px;outline:none}
+  input:focus{border-color:var(--accent)}
+  #sug{background:#181423;border:1px solid var(--border);border-radius:8px;margin-top:4px;display:none;overflow:hidden}
+  #sug div{padding:8px 10px;font-size:12px;cursor:pointer}#sug div:hover{background:var(--panel3)}
+  .seg{display:flex;gap:6px;margin-top:4px}
+  .seg button{flex:1;background:var(--panel2);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:9px;font-size:12.5px;cursor:pointer}
+  .seg button.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  .go{width:100%;margin-top:16px;border:none;border-radius:9px;padding:13px;font-size:14px;font-weight:700;color:#fff;background:linear-gradient(90deg,var(--accent2),var(--accent));cursor:pointer}
+  .go:disabled{opacity:.6}
+  .res{margin-top:16px;border-top:1px solid var(--border);padding-top:12px;display:none}
+  .res .r{display:flex;justify-content:space-between;font-size:13px;padding:6px 0;color:#cfc9de}
+  .res .r b{font-weight:700}
+  .res .big{font-size:20px;font-weight:800;color:#fff;border-top:1px solid var(--border);margin-top:6px;padding-top:11px}
+  .res .big b{color:#a8c0ff}
+  .verdict{margin-top:10px;padding:11px;border-radius:9px;font-size:13px;font-weight:600;text-align:center}
+  .note{font-size:11px;color:var(--muted);margin-top:12px;line-height:1.5}
+  .big-val{font-size:34px;font-weight:800;letter-spacing:.5px}
+  .sub-val{font-size:13px;color:var(--muted)}
+  .legend{display:flex;gap:18px;font-size:12px;color:var(--muted);margin-top:6px}
+  .legend span b{color:#fff}
+  .spin{display:inline-block;width:13px;height:13px;border:2px solid #fff5;border-top-color:#fff;border-radius:50%;animation:r .7s linear infinite;vertical-align:-2px;margin-right:7px}@keyframes r{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="top"><span class="t">⏱️ Immo Stats</span><a href="./menu-cadastre.html">← Menu</a></div>
+<div class="wrap">
+  <div class="stage">
+    <svg id="gauge" viewBox="0 0 200 132" width="460" height="300">
+      <path id="seg1" fill="none" stroke="#2f9e54" stroke-width="16" stroke-linecap="round"/>
+      <path id="seg2" fill="none" stroke="#b6d136" stroke-width="16"/>
+      <path id="seg3" fill="none" stroke="#f5a623" stroke-width="16"/>
+      <path id="seg4" fill="none" stroke="#e3151b" stroke-width="16" stroke-linecap="round"/>
+      <text id="lmin" x="16" y="120" fill="#9d96b0" font-size="9">min</text>
+      <text id="lmax" x="184" y="120" text-anchor="end" fill="#9d96b0" font-size="9">max</text>
+      <line id="needle" x1="100" y1="100" x2="100" y2="28" stroke="#fff" stroke-width="3" stroke-linecap="round" style="transition:.6s cubic-bezier(.2,.8,.2,1)"/>
+      <circle cx="100" cy="100" r="6" fill="#fff"/>
+    </svg>
+    <div class="big-val" id="bigVal">—</div>
+    <div class="sub-val" id="subVal">Renseignez une adresse et une surface</div>
+    <div class="legend"><span>Vendu (DVF) : <b id="lgVendu">—</b></span><span>Demandé (annonces) : <b id="lgDemande">—</b></span></div>
+  </div>
+
+  <div class="panel">
+    <div class="ptop"><input id="lien" placeholder="Lien d'une annonce" /><button>Coller</button></div>
+    <label>Adresse du bien *</label>
+    <input id="adr" placeholder="Saisir l'adresse…" autocomplete="off"><div id="sug"></div>
+    <label>Type de bien</label>
+    <div class="seg" id="type"><button data-t="Maison" class="on">Maison</button><button data-t="Appartement">Appartement</button></div>
+    <label>Surface habitable (m²) *</label>
+    <input id="surf" type="number" value="90">
+    <label>Prix du bien (€) — optionnel</label>
+    <input id="prix" type="number" placeholder="pour positionner l'aiguille">
+    <button class="go" id="go">⏱️ Évaluer</button>
+    <div class="res" id="res">
+      <div class="r"><span>Prix au m² médian (secteur)</span><b id="rMed">—</b></div>
+      <div class="r"><span>Fourchette marché /m²</span><b id="rRange">—</b></div>
+      <div class="r big"><span>Valeur de marché estimée</span><b id="rVal">—</b></div>
+      <div class="verdict" id="verdict" style="display:none"></div>
+    </div>
+    <div class="note">L'aiguille situe le prix au m² du bien entre le bas (vert, bonne affaire) et le haut (rouge, cher) du marché local, calculé sur les <b>ventes réelles (DVF)</b> et les <b>prix demandés (annonces)</b> du même type dans un rayon de 1,5 km.</div>
+  </div>
+</div>
+
+<script src="./annonces-api.js"></script>
+<script>
+const BAN="https://api-adresse.data.gouv.fr/search/";
+const DVF="https://public.opendatasoft.com/api/explore/v2.1/catalog/datasets/buildingref-france-demande-de-valeurs-foncieres-geolocalisee-millesime/records";
+const $=id=>document.getElementById(id);
+let lat=null,lon=null,type="Maison";
+const E=n=>isFinite(n)&&n?Math.round(n).toLocaleString("fr-FR")+" €":"—";
+
+/* jauge : points sur le demi-cercle haut, v∈[0,1] gauche→droite */
+function P(v,r){const th=Math.PI*(1-v);return [100+ (r||80)*Math.cos(th), 100-(r||80)*Math.sin(th)];}
+function segPath(va,vb){const a=P(va),b=P(vb);return "M "+a[0].toFixed(1)+" "+a[1].toFixed(1)+" A 80 80 0 0 1 "+b[0].toFixed(1)+" "+b[1].toFixed(1);}
+$("seg1").setAttribute("d",segPath(0,0.25));$("seg2").setAttribute("d",segPath(0.25,0.5));$("seg3").setAttribute("d",segPath(0.5,0.75));$("seg4").setAttribute("d",segPath(0.75,1));
+function setNeedle(v){v=Math.max(0,Math.min(1,v));const e=P(v,72);$("needle").setAttribute("x2",e[0].toFixed(1));$("needle").setAttribute("y2",e[1].toFixed(1));}
+setNeedle(0.5);
+
+/* type */
+$("type").querySelectorAll("button").forEach(b=>b.onclick=()=>{$("type").querySelectorAll("button").forEach(x=>x.classList.remove("on"));b.classList.add("on");type=b.dataset.t;});
+
+/* géoloc */
+const adr=$("adr"),sug=$("sug");let tmr;
+adr.addEventListener("input",()=>{lat=null;clearTimeout(tmr);const q=adr.value.trim();if(q.length<3){sug.style.display="none";return;}
+  tmr=setTimeout(async()=>{try{const r=await fetch(BAN+"?q="+encodeURIComponent(q)+"&limit=6&autocomplete=1");const d=await r.json();sug.innerHTML="";(d.features||[]).forEach(f=>{const div=document.createElement("div");div.textContent=f.properties.label;div.onclick=()=>{adr.value=f.properties.label;lat=f.geometry.coordinates[1];lon=f.geometry.coordinates[0];sug.style.display="none";};sug.appendChild(div);});sug.style.display=d.features&&d.features.length?"block":"none";}catch(e){}},250);});
+document.addEventListener("click",e=>{if(e.target!==adr)sug.style.display="none";});
+
+function pct(arr,p){if(!arr.length)return null;const s=[...arr].sort((a,b)=>a-b);return s[Math.min(s.length-1,Math.floor(p*s.length))];}
+function median(a){return pct(a,0.5);}
+
+$("go").onclick=async()=>{
+  if(!lat){alert("Choisissez une adresse dans la liste.");return;}
+  const surf=+$("surf").value||0;if(!surf){alert("Indiquez la surface.");return;}
+  const btn=$("go");btn.disabled=true;btn.innerHTML='<span class="spin"></span>Analyse du marché…';
+  let dvfM2=[],annM2=[];
+  // DVF (ventes)
+  try{
+    const w="within_distance(geo_point, geom'POINT("+lon+" "+lat+")', 1500m) and nature_mutation='Vente' and type_local='"+type+"' and surface_reelle_bati>9 and date_mutation>='2021-01-01'";
+    let recs=[];for(let off=0;off<400;off+=100){const r=await fetch(DVF+"?where="+encodeURIComponent(w)+"&limit=100&offset="+off+"&select=valeur_fonciere,surface_reelle_bati");const d=await r.json();recs=recs.concat(d.results||[]);if((d.results||[]).length<100)break;}
+    dvfM2=recs.map(m=>m.valeur_fonciere/m.surface_reelle_bati).filter(v=>v>300&&v<25000);
+  }catch(e){}
+  // Annonces (prix demandés)
+  try{ if(window.ANNONCES_API){const items=await window.ANNONCES_API({comparables:true,lat,lon,type,rayon:1.5});annM2=(items||[]).map(a=>a.m2).filter(v=>v>300&&v<25000);} }catch(e){}
+  const all=dvfM2.concat(annM2);
+  if(all.length<3){alert("Pas assez de références dans le secteur.");btn.disabled=false;btn.textContent="⏱️ Évaluer";return;}
+  const min=pct(all,0.10),max=pct(all,0.90),med=median(all);
+  const medVendu=median(dvfM2),medDemande=median(annM2);
+  const prix=+$("prix").value||0;
+  const subjectM2=prix?prix/surf:med;
+  const v=(subjectM2-min)/(max-min);
+  setNeedle(v);
+  $("bigVal").textContent=Math.round(med)+" €/m²";
+  $("subVal").textContent="prix médian du secteur ("+all.length+" références)";
+  $("lgVendu").textContent=medVendu?Math.round(medVendu)+" €/m²":"—";
+  $("lgDemande").textContent=medDemande?Math.round(medDemande)+" €/m²":"—";
+  $("lmin").textContent=Math.round(min)+"€";$("lmax").textContent=Math.round(max)+"€";
+  $("res").style.display="block";
+  $("rMed").textContent=Math.round(med)+" €/m²";
+  $("rRange").textContent=Math.round(min)+" — "+Math.round(max)+" €/m²";
+  $("rVal").textContent=E(med*surf);
+  const vd=$("verdict");
+  if(prix){
+    vd.style.display="block";
+    const sub=Math.round(subjectM2);
+    if(v<0.35){vd.style.background="#163a26";vd.style.color="#7be0a0";vd.textContent="✅ "+sub+" €/m² — sous le marché (bonne affaire)";}
+    else if(v<0.65){vd.style.background="#3a3416";vd.style.color="#f2e3a0";vd.textContent="≈ "+sub+" €/m² — dans le marché";}
+    else{vd.style.background="#3a1620";vd.style.color="#ff9ab0";vd.textContent="⚠️ "+sub+" €/m² — au-dessus du marché";}
+  }else vd.style.display="none";
+  btn.disabled=false;btn.textContent="⏱️ Évaluer";
+};
+</script>
+</body>
+</html>
