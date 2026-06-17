@@ -123,7 +123,9 @@
         <button data-z="quartiers">Quartiers</button>
         <button data-z="plu">PLU</button>
       </div>
-      <button class="wide">Zone de prospection</button>
+      <button class="wide" id="prospZoneBtn">Zone de prospection</button>
+      <button id="prospSaveBtn" style="display:none;width:100%;margin-top:6px;padding:9px;background:#2f9e54;color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer">💾 Enregistrer la zone de prospection</button>
+      <button id="prospCancelBtn" style="display:none;width:100%;margin-top:6px;padding:7px;background:transparent;color:#e0a14d;border:1px solid #e0a14d;border-radius:8px;font-size:11.5px;cursor:pointer">✕ Annuler le tracé</button>
       <div class="note">Le cercle apparaît sur la carte : déplacez le centre, tirez la poignée pour le rayon.</div>
     </div>
 
@@ -234,6 +236,7 @@ const parcelGeo=L.geoJSON(null,{style:{color:"#39e63a",weight:1.2,fillColor:"#39
 /* ---------- zones (réutilise la logique validée du DPE) ---------- */
 let zone="cercle", center=[47.394,0.687], radius=350, inner=150, rect=null, poly=[];
 let adminPoly=null, adminLabel="", shapeLayer=null, innerLayer=null, handles=[];
+let prospMode=false, prospPoly=[], prospLayer=null;
 const SHAPE={color:"#5fe08a",weight:1.5,fillColor:"#39e63a",fillOpacity:.06};
 const ADMIN=["ville","quartiers","plu"];
 function dot(c){return L.divIcon({className:"",html:'<div style="width:14px;height:14px;border-radius:50%;background:'+c+';border:2px solid #fff;box-shadow:0 1px 4px #0008"></div>',iconSize:[14,14]});}
@@ -292,7 +295,7 @@ function zoneBBoxContains(){
   const contains=zone==="donut"?(y,x)=>{const d=map.distance(center,[y,x]);return d>=inner&&d<=radius;}:(y,x)=>map.distance(center,[y,x])<=radius;
   return {s:b.getSouth(),w:b.getWest(),n:b.getNorth(),e:b.getEast(),contains};
 }
-map.on("click",e=>{if(zone==="polygone"){poly.push([e.latlng.lat,e.latlng.lng]);buildShape();auto();}else recenterTo(e.latlng.lat,e.latlng.lng,false);});
+map.on("click",e=>{if(prospMode){prospAdd(e.latlng);return;}if(zone==="polygone"){poly.push([e.latlng.lat,e.latlng.lng]);buildShape();auto();}else recenterTo(e.latlng.lat,e.latlng.lng,false);});
 
 /* ---------- géolocalisateur ---------- */
 const geoIn=document.getElementById("geoIn"),sug=document.getElementById("suggest");let tmr;
@@ -439,22 +442,50 @@ async function run(){
 function ringMeters(ring){const lat0=ring[0][0]*Math.PI/180,mLat=111320,mLon=111320*Math.cos(lat0);return ring.map(p=>[p[1]*mLon,p[0]*mLat]);}
 function polyAP(pts){let A=0,P=0;for(let i=0,n=pts.length;i<n;i++){const a=pts[i],b=pts[(i+1)%n];A+=a[0]*b[1]-b[0]*a[1];P+=Math.hypot(b[0]-a[0],b[1]-a[1]);}return{area:Math.abs(A)/2,perim:P};}
 /* anneau [[lat,lon]] -> "rond" (arrondi) / "L" / "U" / "rect" (compte les angles rentrants) */
+/* simplifie un anneau (mètres, non fermé) : retire les sommets de bruit
+   (arêtes courtes) et les sommets quasi-alignés → ne garde que les vrais coins.
+   BD TOPO densifie les contours → sans ça, le bruit crée de faux angles rentrants. */
+function simplifyRingM(pts){
+  let p=[];
+  for(let i=0;i<pts.length;i++){const a=pts[i],b=p[p.length-1];if(!b||Math.hypot(a[0]-b[0],a[1]-b[1])>=0.5)p.push(a);}
+  if(p.length<4)return p;
+  let changed=true,guard=0;
+  while(changed&&p.length>4&&guard++<2000){
+    changed=false;
+    for(let i=0;i<p.length;i++){
+      const n=p.length,a=p[(i-1+n)%n],b=p[i],c=p[(i+1)%n];
+      const v1=[b[0]-a[0],b[1]-a[1]],v2=[c[0]-b[0],c[1]-b[1]];
+      const l1=Math.hypot(v1[0],v1[1]),l2=Math.hypot(v2[0],v2[1]);
+      if(l1<1e-6||l2<1e-6){p.splice(i,1);changed=true;break;}
+      const cross=v1[0]*v2[1]-v1[1]*v2[0],dot=v1[0]*v2[0]+v1[1]*v2[1];
+      const ang=Math.abs(Math.atan2(cross,dot));      // angle de virage au sommet b
+      // sommet quasi-aligné (<~15°) OU petite arête de bruit (<2 m) sans vrai coin (<~29°)
+      if(ang<0.26||(Math.min(l1,l2)<2&&ang<0.5)){p.splice(i,1);changed=true;break;}
+    }
+  }
+  return p;
+}
+/* anneau [[lat,lon]] -> "rond" (arrondi) / "L" / "U" / "rect" (compte les angles rentrants) */
 function shapeClass(ring){
   if(!ring||ring.length<4)return "rect";
   let r=ring.slice();if(r.length>1&&r[0][0]===r[r.length-1][0]&&r[0][1]===r[r.length-1][1])r.pop();
   if(r.length<4)return "rect";
-  const pts=ringMeters(r),ap=polyAP(pts);
+  const ptsRaw=ringMeters(r),ap=polyAP(ptsRaw);
   if(ap.perim<=0||ap.area<=0)return "rect";
+  // Circularité : un rectangle plafonne à π/4≈0.785 ; au-delà de 0.82 = vraiment arrondi/courbe.
   const circ=4*Math.PI*ap.area/(ap.perim*ap.perim);
-  if(circ>0.85)return "rond";
-  let A2=0;for(let i=0,n=pts.length;i<n;i++){const a=pts[i],b=pts[(i+1)%n];A2+=a[0]*b[1]-b[0]*a[1];}
-  const ccw=A2>0,n=pts.length;let reflex=0;
+  if(circ>=0.82)return "rond";
+  const pts=simplifyRingM(ptsRaw),n=pts.length;
+  if(n<5)return "rect";                                // 4 coins (ou moins) = rectangle
+  let A2=0;for(let i=0;i<n;i++){const a=pts[i],b=pts[(i+1)%n];A2+=a[0]*b[1]-b[0]*a[1];}
+  const ccw=A2>0;let reflex=0;
   for(let i=0;i<n;i++){
     const a=pts[(i-1+n)%n],b=pts[i],c=pts[(i+1)%n];
     const v1=[b[0]-a[0],b[1]-a[1]],v2=[c[0]-b[0],c[1]-b[1]];
     const l1=Math.hypot(v1[0],v1[1]),l2=Math.hypot(v2[0],v2[1]);if(l1<1||l2<1)continue;
     const cross=v1[0]*v2[1]-v1[1]*v2[0],dot=v1[0]*v2[0]+v1[1]*v2[1];
-    if(Math.abs(Math.atan2(cross,dot))<0.35)continue;
+    // ne compte que les coins nets (~40°+) : un décroché en L/U fait ~90°
+    if(Math.abs(Math.atan2(cross,dot))<0.7)continue;
     if(ccw?(cross<0):(cross>0))reflex++;
   }
   if(reflex>=2)return "U";if(reflex===1)return "L";return "rect";
@@ -536,6 +567,50 @@ function loadProsp(){try{return JSON.parse(localStorage.getItem("prospects")||"[
 function saveProsp(a){try{localStorage.setItem("prospects",JSON.stringify(a));}catch(e){}}
 function hasProsp(ref){return loadProsp().some(p=>p.ref===ref);}
 function removeProsp(ref){saveProsp(loadProsp().filter(p=>p.ref!==ref));}
+/* ⭐ Zone de prospection : dessin libre d'un polygone → enregistré dans la prospection (catégorie « Zones ») */
+const prospZoneBtn=document.getElementById("prospZoneBtn");
+const prospSaveBtn=document.getElementById("prospSaveBtn");
+const prospCancelBtn=document.getElementById("prospCancelBtn");
+function setProspSave(){
+  if(prospSaveBtn)prospSaveBtn.style.display=(prospMode&&prospPoly.length>=3)?"block":"none";
+  if(prospCancelBtn)prospCancelBtn.style.display=prospMode?"block":"none";
+}
+function prospDraw(){
+  if(prospLayer){map.removeLayer(prospLayer);prospLayer=null;}
+  if(prospPoly.length){
+    prospLayer=L.layerGroup().addTo(map);
+    L.polygon(prospPoly,{color:"#ff8c00",weight:2,dashArray:"5 4",fillColor:"#ff8c00",fillOpacity:.12}).addTo(prospLayer);
+    prospPoly.forEach(p=>L.circleMarker(p,{radius:3,color:"#ff8c00",fillColor:"#fff",fillOpacity:1,weight:2}).addTo(prospLayer));
+  }
+  setProspSave();
+}
+function prospAdd(ll){prospPoly.push([ll.lat,ll.lng]);prospDraw();}
+function prospExit(){
+  prospMode=false;prospPoly=[];prospDraw();
+  if(prospZoneBtn){prospZoneBtn.style.background="";prospZoneBtn.style.color="";prospZoneBtn.textContent="Zone de prospection";}
+  geoIn.placeholder="Adresse, commune, N° parcelle…";setProspSave();
+}
+if(prospZoneBtn)prospZoneBtn.onclick=()=>{
+  if(prospMode){prospExit();return;}
+  prospMode=true;prospPoly=[];
+  prospZoneBtn.style.background="#ff8c00";prospZoneBtn.style.color="#fff";
+  prospZoneBtn.textContent="✏️ Cliquez la carte pour tracer…";
+  geoIn.placeholder="Tracez la zone : cliquez les sommets sur la carte…";
+  prospDraw();
+};
+if(prospCancelBtn)prospCancelBtn.onclick=()=>prospExit();
+if(prospSaveBtn)prospSaveBtn.onclick=()=>{
+  if(prospPoly.length<3){alert("Tracez au moins 3 points sur la carte.");return;}
+  const name=prompt("Nom de la zone de prospection :","Zone "+new Date().toLocaleDateString("fr-FR"));
+  if(name===null)return;
+  let la=0,lo=0;prospPoly.forEach(p=>{la+=p[0];lo+=p[1];});la/=prospPoly.length;lo/=prospPoly.length;
+  const nm=(name&&name.trim())||"Zone de prospection";
+  const arr=loadProsp();
+  arr.push({id:Date.now()+Math.floor(Math.random()*1e4),ref:"zone:"+Date.now(),lat:+la.toFixed(6),lon:+lo.toFixed(6),cat:"zones",status:"a_prospecter",address:nm,contact:"",note:prospPoly.length+" sommets",date:new Date().toISOString().slice(0,10),geom:prospPoly.slice()});
+  saveProsp(arr);
+  alert("Zone « "+nm+" » enregistrée dans la prospection (catégorie « Zones »).");
+  prospExit();
+};
 function addParcelProsp(f,c,ref){
   const p=f.properties;const arr=loadProsp();if(arr.some(x=>x.ref===ref))return;
   const note="Parcelle "+(p.section||"")+" "+(p.numero||"")+" · "+(p.contenance||"?")+" m²"+(buildingsLoaded&&p._bati?" · bâti "+Math.round(p._bati)+" m²":"");
