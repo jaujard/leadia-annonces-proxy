@@ -65,7 +65,10 @@ async function GET(qs) {
 async function firstSource() { const r = await GET("select=source&order=source.asc&limit=1"); return r[0] ? r[0].source : null; }
 async function nextSource(cur) { const r = await GET("select=source&source=gt." + enc(q(cur)) + "&order=source.asc&limit=1"); return r[0] ? r[0].source : null; }
 async function page(source, lastRef) {
-  let qs = "select=source,reference,description,surface,land_surface&type=eq.Maison"
+  // PAS de filtre type ici : on lit 1000 lignes CONSÉCUTIVES de la clé primaire
+  // (source=X, reference>Y) → toujours un parcours d'index borné, jamais lent.
+  // Le filtre « Maison » se fait côté JS.
+  let qs = "select=source,reference,type,description,surface,land_surface"
     + "&source=eq." + enc(q(source)) + "&order=reference.asc&limit=" + PAGE;
   if (lastRef !== null) qs += "&reference=gt." + enc(q(lastRef));
   return GET(qs);
@@ -93,6 +96,7 @@ async function runPool(jobs) {
       lastRef = rows[rows.length - 1].reference;
       const jobs = [];
       for (const row of rows) {
+        if (row.type !== "Maison") continue;       // filtre Maison côté JS
         scanned++;
         if (row.land_surface == null && row.description) {
           const n = parseLandFromText(row.description);
