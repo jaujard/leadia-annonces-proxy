@@ -12,6 +12,10 @@
  * Logique d'extraction = STRICTEMENT la même que harvest.js (0 faux positif :
  * terrain toujours > surface habitable, bornes 10–2 000 000 m²).
  *
+ * Pagination : on parcourt source par source, puis reference croissant. Comme la
+ * clé primaire est (source, reference), chaque page = un simple parcours d'index
+ * (source = X, reference > Y) → PAS de tri lourd, PAS de statement timeout.
+ *
  * Env (mêmes que le harvester) :
  *   SUPABASE_URL, SUPABASE_SERVICE_KEY
  *   DRY_RUN=1   → simule et compte, n'écrit rien (à lancer EN PREMIER)
@@ -31,11 +35,13 @@ const REST = SB_URL.replace(/\/+$/, "") + "/rest/v1/leadia_annonces";
 const H = { apikey: SB_KEY, Authorization: "Bearer " + SB_KEY };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const num = v => (v == null || v === "" || isNaN(Number(v))) ? null : Number(v);
+const t0 = Date.now();
+const hms = () => new Date().toISOString().slice(11, 19);
 
 // ── extracteur terrain (copie verbatim de harvest.js) ──
 function parseLandFromText(t) {
   if (!t) return null;
-  t = String(t).replace(/ /g, " ").replace(/&nbsp;/gi, " ");
+  t = String(t).replace(/ /g, " ").replace(/&nbsp;/gi, " ");
   const toNum = s => { const n = parseInt(String(s).replace(/[ .]/g, ""), 10); return isNaN(n) ? null : n; };
   const M2 = "m(?:\\u00b2|2|\\s*carr)";
   let m = t.match(new RegExp("(?:terrain|parcelle|jardin)(?:[^.\\d]{0,25}?)(\\d[\\d .]{1,7}?)\\s*" + M2, "i"));
@@ -46,53 +52,60 @@ function parseLandFromText(t) {
   return n;
 }
 
-const PAGE = 1000;        // taille de page (keyset sur la PK source,reference)
+const PAGE = 1000;        // page par source (parcours index PK, sans tri)
 const CONC = 5;           // PATCH en parallèle
-const q = s => '"' + String(s).replace(/"/g, '\\"') + '"';
+const q = s => '"' + String(s).replace(/"/g, '\\"') + '"';   // quote valeur PostgREST
+const enc = encodeURIComponent;
 
-async function fetchPage(lastS, lastR) {
-  let url = REST + "?select=source,reference,description,surface,land_surface"
-    + "&type=eq.Maison&order=source.asc,reference.asc&limit=" + PAGE;
-  if (lastS !== null) {
-    url += "&or=(source.gt." + encodeURIComponent(q(lastS))
-      + ",and(source.eq." + encodeURIComponent(q(lastS))
-      + ",reference.gt." + encodeURIComponent(q(lastR)) + "))";
-  }
-  const r = await fetch(url, { headers: H });
+async function GET(qs) {
+  const r = await fetch(REST + "?" + qs, { headers: H });
   if (!r.ok) throw new Error("GET " + r.status + " " + (await r.text()).slice(0, 200));
   return r.json();
 }
+async function firstSource() { const r = await GET("select=source&order=source.asc&limit=1"); return r[0] ? r[0].source : null; }
+async function nextSource(cur) { const r = await GET("select=source&source=gt." + enc(q(cur)) + "&order=source.asc&limit=1"); return r[0] ? r[0].source : null; }
+async function page(source, lastRef) {
+  let qs = "select=source,reference,description,surface,land_surface&type=eq.Maison"
+    + "&source=eq." + enc(q(source)) + "&order=reference.asc&limit=" + PAGE;
+  if (lastRef !== null) qs += "&reference=gt." + enc(q(lastRef));
+  return GET(qs);
+}
 async function patchOne(src, ref, val) {
-  const url = REST + "?source=eq." + encodeURIComponent(q(src)) + "&reference=eq." + encodeURIComponent(q(ref));
+  const url = REST + "?source=eq." + enc(q(src)) + "&reference=eq." + enc(q(ref));
   const r = await fetch(url, { method: "PATCH", headers: { ...H, "Content-Type": "application/json", Prefer: "return=minimal" },
     body: JSON.stringify({ land_surface: val }) });
   if (!r.ok) throw new Error("PATCH " + r.status + " " + (await r.text()).slice(0, 200));
 }
 async function runPool(jobs) {
   let i = 0;
-  async function worker() { while (i < jobs.length) { const j = jobs[i++]; await patchOne(j.s, j.r, j.v); } }
+  const worker = async () => { while (i < jobs.length) { const j = jobs[i++]; await patchOne(j.s, j.r, j.v); } };
   await Promise.all(Array.from({ length: Math.min(CONC, jobs.length) }, worker));
 }
 
 (async () => {
-  console.log((DRY ? "[DRY RUN] " : "") + new Date().toISOString().slice(11, 19) + " Backfill terrain (maisons, depuis description)…");
-  let lastS = null, lastR = null, scanned = 0, filled = 0;
-  for (;;) {
-    const rows = await fetchPage(lastS, lastR);
-    if (!rows.length) break;
-    const jobs = [];
-    for (const row of rows) {
-      scanned++; lastS = row.source; lastR = row.reference;
-      if (row.land_surface == null && row.description) {
-        const n = parseLandFromText(row.description);
-        const surf = num(row.surface);
-        if (n != null && (surf == null || n > surf)) { jobs.push({ s: row.source, r: row.reference, v: n }); filled++; }
+  console.log((DRY ? "[DRY RUN] " : "") + hms() + " Backfill terrain (maisons, depuis description)…");
+  let scanned = 0, filled = 0, source = await firstSource();
+  while (source !== null) {
+    let lastRef = null;
+    for (;;) {
+      const rows = await page(source, lastRef);
+      if (!rows.length) break;
+      lastRef = rows[rows.length - 1].reference;
+      const jobs = [];
+      for (const row of rows) {
+        scanned++;
+        if (row.land_surface == null && row.description) {
+          const n = parseLandFromText(row.description);
+          const surf = num(row.surface);
+          if (n != null && (surf == null || n > surf)) { jobs.push({ s: row.source, r: row.reference, v: n }); filled++; }
+        }
       }
+      if (!DRY && jobs.length) await runPool(jobs);
+      console.log(hms() + " src=" + source + " · scannées=" + scanned + " · terrain ajouté=" + filled);
+      await sleep(40);
     }
-    if (!DRY && jobs.length) await runPool(jobs);
-    console.log(new Date().toISOString().slice(11, 19) + " scannées=" + scanned + " · terrain ajouté=" + filled);
-    await sleep(50);
+    source = await nextSource(source);
   }
-  console.log(new Date().toISOString().slice(11, 19) + " TERMINÉ. Maisons scannées=" + scanned
+  console.log(hms() + " TERMINÉ en " + Math.round((Date.now() - t0) / 1000) + "s. Maisons scannées=" + scanned
     + ", terrain renseigné depuis description=" + filled + (DRY ? "  [DRY RUN — rien écrit]" : ""));
 })().catch(e => { console.error("✗ ERREUR:", e.message); process.exit(1); });
