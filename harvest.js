@@ -218,7 +218,9 @@ function mapRow(a, transaction) {
     price_per_m2: num(a.price_per_m2),
     price_per_m2_color: a.price_per_m2_color != null ? a.price_per_m2_color : null,
     surface: num(a.surface),
-    land_surface: num(a.land_surface) != null ? num(a.land_surface) : parseLandFromText(a.description),
+    land_surface: num(a.land_surface) != null ? num(a.land_surface)
+                : (a.type === "Terrain" && num(a.surface) != null ? num(a.surface)
+                : parseLandFromText(a.description)),
     living_room_surface: num(a.living_room_surface),
     rooms: int4(a.rooms),
     bedrooms: int4(a.bedrooms),
