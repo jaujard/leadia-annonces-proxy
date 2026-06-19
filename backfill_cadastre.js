@@ -54,9 +54,8 @@ async function sbFetch(path, opts = {}) {
 // Candidats : terrain a blanc, geolocalise, pas encore teste par le cadastre.
 async function fetchCandidates(limit) {
   const sel = "source,reference,city,latitude,longitude";
-  const flt = "type=eq.Terrain"
+  const flt = "type=in.(Terrain,Maison)"
     + "&land_surface=is.null"
-    + "&surface=is.null"
     + "&latitude=not.is.null"
     + "&longitude=not.is.null"
     + "&cadastre_checked_at=is.null";
