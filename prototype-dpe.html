@@ -474,7 +474,8 @@ function geoParams(){
   return {key:"geo_distance",val:center[0]+","+center[1]+","+radius,contains:null};
 }
 map.on("click",e=>{
-  if(e.originalEvent.target.classList&&e.originalEvent.target.classList.contains("hdl"))return;
+  const tc=e.originalEvent.target.classList;
+  if(tc&&(tc.contains("hdl")||tc.contains("dvfpin")))return;
   if(zone==="polygone"){poly.push([e.lngLat.lng,e.lngLat.lat]);buildShape();auto();}
   else recenterTo(e.lngLat.lng,e.lngLat.lat,false);
 });
@@ -607,7 +608,6 @@ function loadDvf(){
           (f.surface_terrain>0?'<div>Terrain : '+f.surface_terrain+' m²</div>':'')+
           (adr?'<div style="color:#6a6580;margin-top:3px">'+adr+'</div>':'')+'</div>';
         const el=document.createElement("div");el.className="dvfpin";el.textContent="€";
-        el.addEventListener("click",ev=>ev.stopPropagation());
         const m=new maplibregl.Marker({element:el}).setLngLat([lon,lat])
           .setPopup(new maplibregl.Popup({offset:14,className:"dvf"}).setHTML(html)).addTo(map);
         dvfMarkers.push(m);
