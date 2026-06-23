@@ -607,6 +607,7 @@ function loadDvf(){
           (f.surface_terrain>0?'<div>Terrain : '+f.surface_terrain+' m²</div>':'')+
           (adr?'<div style="color:#6a6580;margin-top:3px">'+adr+'</div>':'')+'</div>';
         const el=document.createElement("div");el.className="dvfpin";el.textContent="€";
+        el.addEventListener("click",ev=>ev.stopPropagation());
         const m=new maplibregl.Marker({element:el}).setLngLat([lon,lat])
           .setPopup(new maplibregl.Popup({offset:14,className:"dvf"}).setHTML(html)).addTo(map);
         dvfMarkers.push(m);
