@@ -76,6 +76,8 @@
   .ges{font-size:9.5px;padding:1px 5px;border-radius:4px;font-weight:800;color:#15121d}
   .pin{font-weight:800;font-size:11px;color:#15121d;border:2px solid #fff;border-radius:50%;width:23px;height:23px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px #0008;cursor:pointer}
   .pin.seen{filter:grayscale(.7);opacity:.55}
+  .dvfpin{width:19px;height:19px;border-radius:50%;background:#1769ff;border:2px solid #fff;box-shadow:0 1px 5px #0009;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:800}
+  .maplibregl-popup.dvf .maplibregl-popup-content{border-top:3px solid #1769ff;border-radius:9px;padding:9px 12px}
   .hdl{width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px #0008;cursor:grab}
   .rad-tip{position:absolute;transform:translate(12px,-50%);background:#15121dEE;color:#fff;border:1px solid var(--accent);border-radius:6px;padding:2px 7px;font-size:11px;font-weight:600;white-space:nowrap;pointer-events:none}
   .spin{display:inline-block;width:13px;height:13px;border:2px solid #fff5;border-top-color:#fff;border-radius:50%;animation:r .7s linear infinite;vertical-align:-2px;margin-right:7px}
@@ -512,7 +514,7 @@ function multi(id){const s=new Set();document.querySelectorAll("#"+id+" button")
   b.classList.toggle("on");b.classList.contains("on")?s.add(b.dataset.v):s.delete(b.dataset.v);auto();});return s;}
 const dpeSet=multi("dpeLab"), gesSet=multi("gesLab");
 ["sMin","sMax","eMin","eMax","gMin","gMax"].forEach(id=>document.getElementById(id).addEventListener("change",auto));
-const dvf=document.getElementById("dvf");dvf.onclick=()=>dvf.classList.toggle("on");
+const dvf=document.getElementById("dvf");dvf.onclick=()=>{dvf.classList.toggle("on");loadDvf();};
 
 function rangeQ(field,min,max){if(!min&&!max)return null;return field+":["+(min||"*")+" TO "+(max||"*")+"]";}
 function fmtD(d){const z=n=>(""+n).padStart(2,"0");return d.getFullYear()+"-"+z(d.getMonth()+1)+"-"+z(d.getDate());}
@@ -561,8 +563,56 @@ async function run(){
     if(gp.contains){const before=rows.length;rows=rows.filter(row=>{const g=(row._geopoint||"").split(",");return g.length===2&&gp.contains(+g[1],+g[0]);});
       approx=true; total=total>before?Math.round(total*rows.length/Math.max(before,1)):rows.length;}
     lastRows=rows;lastTotal=total;lastApprox=approx;render(total,approx);
+    loadDvf();
   }catch(e){dpeCount.textContent="Erreur ADEME";}
   go.disabled=false;
+}
+
+/* ---------- ventes DVF (Demandes de Valeurs Foncières, open data) ---------- */
+const DVF_DS="buildingref-france-demande-de-valeurs-foncieres-geolocalisee-millesime";
+const eur=v=>{try{return new Intl.NumberFormat("fr-FR",{style:"currency",currency:"EUR",maximumFractionDigits:0}).format(v);}catch(e){return (v||0)+" €";}};
+let dvfMarkers=[],dvfTmr;
+function clearDvf(){dvfMarkers.forEach(m=>m.remove());dvfMarkers=[];}
+function zoneCircle(){
+  if(zone==="cercle"||zone==="donut")return{lat:center[1],lon:center[0],r:radius};
+  let bb=null;
+  if(zone==="rectangle"&&rect)bb=rect;
+  else if(zone==="polygone"&&poly.length>=3){const lo=poly.map(p=>p[0]),la=poly.map(p=>p[1]);bb=[Math.min(...lo),Math.min(...la),Math.max(...lo),Math.max(...la)];}
+  else if(adminPoly&&adminPoly[0]){const ring=adminPoly[0],lo=ring.map(p=>p[0]),la=ring.map(p=>p[1]);bb=[Math.min(...lo),Math.min(...la),Math.max(...lo),Math.max(...la)];}
+  if(!bb)return null;
+  const cx=(bb[0]+bb[2])/2,cy=(bb[1]+bb[3])/2;let r=200;
+  try{r=turf.distance([cx,cy],[bb[2],bb[3]],{units:"kilometers"})*1000;}catch(e){}
+  return{lat:cy,lon:cx,r:Math.max(r,200)};
+}
+function loadDvf(){
+  if(!dvf.classList.contains("on")){clearDvf();return;}
+  const zc=zoneCircle();if(!zc)return;
+  clearTimeout(dvfTmr);
+  dvfTmr=setTimeout(async()=>{
+    const gp=geoParams(),contains=gp&&gp.contains;
+    const url="https://public.opendatasoft.com/api/records/1.0/search/?dataset="+DVF_DS+
+      "&geofilter.distance="+zc.lat+","+zc.lon+","+Math.round(zc.r)+"&rows=400&sort=date_mutation";
+    try{
+      const r=await fetch(url);const d=await r.json();clearDvf();
+      (d.records||[]).forEach(rec=>{
+        const f=rec.fields||{};const g=f.geo_point||(f.latitude!=null?[f.latitude,f.longitude]:null);if(!g)return;
+        const lat=+g[0],lon=+g[1];if(!isFinite(lat)||!isFinite(lon))return;
+        if(contains&&!contains(lon,lat))return;
+        const surf=f.surface_reelle_bati,pm2=(surf>0&&f.valeur_fonciere)?Math.round(f.valeur_fonciere/surf):null;
+        const adr=([f.adresse_numero,f.adresse_nom_voie].filter(Boolean).join(" ")+" "+(f.code_postal||"")+" "+(f.com_name||"")).trim();
+        const html='<div style="font-size:12px;line-height:1.5;min-width:150px">'+
+          '<div style="font-weight:700;color:#1769ff;margin-bottom:2px">'+(f.type_local||f.nature_mutation||"Vente")+' · '+frMois(f.date_mutation)+'</div>'+
+          '<div style="font-size:15px;font-weight:800;color:#15121d">'+eur(f.valeur_fonciere)+'</div>'+
+          (surf>0?'<div>'+surf+' m²'+(pm2?' · <b>'+eur(pm2)+'/m²</b>':'')+(f.nombre_pieces_principales?' · '+f.nombre_pieces_principales+' p.':'')+'</div>':'')+
+          (f.surface_terrain>0?'<div>Terrain : '+f.surface_terrain+' m²</div>':'')+
+          (adr?'<div style="color:#6a6580;margin-top:3px">'+adr+'</div>':'')+'</div>';
+        const el=document.createElement("div");el.className="dvfpin";el.textContent="€";
+        const m=new maplibregl.Marker({element:el}).setLngLat([lon,lat])
+          .setPopup(new maplibregl.Popup({offset:14,className:"dvf"}).setHTML(html)).addTo(map);
+        dvfMarkers.push(m);
+      });
+    }catch(e){}
+  },300);
 }
 
 /* ---------- render markers + list ---------- */
