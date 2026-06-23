@@ -609,9 +609,11 @@ function loadDvf(){
           (surf>0?'<div>'+surf+' m²'+(pm2?' · <b>'+eur(pm2)+'/m²</b>':'')+(f.nombre_pieces_principales?' · '+f.nombre_pieces_principales+' p.':'')+'</div>':'')+
           (f.surface_terrain>0?'<div>Terrain : '+f.surface_terrain+' m²</div>':'')+
           (adr?'<div style="color:#6a6580;margin-top:3px">'+adr+'</div>':'')+'</div>';
-        const el=document.createElement("div");el.className="dvfpin";el.innerHTML='<div class="drop"><b>'+(surf>0?surf:"")+'</b></div>';
-        const m=new maplibregl.Marker({element:el,anchor:"bottom"}).setLngLat([lon,lat])
-          .setPopup(new maplibregl.Popup({offset:14,className:"dvf"}).setHTML(html)).addTo(map);
+        const el=document.createElement("div");el.className="dvfpin";el.innerHTML='<div class="drop"><b>DVF</b></div>';
+        const popup=new maplibregl.Popup({offset:16,className:"dvf",closeButton:false});
+        el.addEventListener("mouseenter",()=>popup.setLngLat([lon,lat]).setHTML(html).addTo(map));
+        el.addEventListener("mouseleave",()=>popup.remove());
+        const m=new maplibregl.Marker({element:el,anchor:"bottom"}).setLngLat([lon,lat]).addTo(map);
         dvfMarkers.push(m);
       });
     }catch(e){}
