@@ -76,8 +76,9 @@
   .ges{font-size:9.5px;padding:1px 5px;border-radius:4px;font-weight:800;color:#15121d}
   .pin{font-weight:800;font-size:11px;color:#15121d;border:2px solid #fff;border-radius:50%;width:23px;height:23px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px #0008;cursor:pointer}
   .pin.seen{filter:grayscale(.7);opacity:.55}
-  .dvfpin{background:#1769ff;color:#fff;font-size:10.5px;font-weight:800;line-height:1;padding:4px 7px;border-radius:8px;border:1.5px solid #fff;box-shadow:0 2px 6px #0009;white-space:nowrap;cursor:pointer}
-  .dvfpin::after{content:"";position:absolute;left:50%;bottom:-6px;transform:translateX(-50%);width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid #1769ff}
+  .dvfpin{cursor:pointer}
+  .dvfpin .drop{width:30px;height:30px;background:#1769ff;border:2px solid #fff;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 6px #0009;display:flex;align-items:center;justify-content:center}
+  .dvfpin .drop b{transform:rotate(45deg);color:#fff;font-size:9px;font-weight:800;line-height:1;white-space:nowrap;text-align:center}
   .maplibregl-popup.dvf .maplibregl-popup-content{border-top:3px solid #1769ff;border-radius:9px;padding:9px 12px}
   .hdl{width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px #0008;cursor:grab}
   .rad-tip{position:absolute;transform:translate(12px,-50%);background:#15121dEE;color:#fff;border:1px solid var(--accent);border-radius:6px;padding:2px 7px;font-size:11px;font-weight:600;white-space:nowrap;pointer-events:none}
@@ -475,8 +476,8 @@ function geoParams(){
   return {key:"geo_distance",val:center[0]+","+center[1]+","+radius,contains:null};
 }
 map.on("click",e=>{
-  const tc=e.originalEvent.target.classList;
-  if(tc&&(tc.contains("hdl")||tc.contains("dvfpin")))return;
+  const t=e.originalEvent.target;
+  if(t&&t.closest&&(t.closest(".hdl")||t.closest(".dvfpin")))return;
   if(zone==="polygone"){poly.push([e.lngLat.lng,e.lngLat.lat]);buildShape();auto();}
   else recenterTo(e.lngLat.lng,e.lngLat.lat,false);
 });
@@ -608,7 +609,7 @@ function loadDvf(){
           (surf>0?'<div>'+surf+' m²'+(pm2?' · <b>'+eur(pm2)+'/m²</b>':'')+(f.nombre_pieces_principales?' · '+f.nombre_pieces_principales+' p.':'')+'</div>':'')+
           (f.surface_terrain>0?'<div>Terrain : '+f.surface_terrain+' m²</div>':'')+
           (adr?'<div style="color:#6a6580;margin-top:3px">'+adr+'</div>':'')+'</div>';
-        const el=document.createElement("div");el.className="dvfpin";el.textContent=(surf>0?surf+" m²":"€");
+        const el=document.createElement("div");el.className="dvfpin";el.innerHTML='<div class="drop"><b>'+(surf>0?surf:"")+'</b></div>';
         const m=new maplibregl.Marker({element:el,anchor:"bottom"}).setLngLat([lon,lat])
           .setPopup(new maplibregl.Popup({offset:14,className:"dvf"}).setHTML(html)).addTo(map);
         dvfMarkers.push(m);
