@@ -4,48 +4,40 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>DPE — Prospection · données ADEME</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
 <style>
   :root{
     --bg:#0d0b14; --panel:#15121d; --panel2:#221d30; --panel3:#2b2540;
     --border:#2c2640; --txt:#ece9f3; --muted:#9d96b0;
     --accent:#7c4dff; --accent2:#4361ee; --sel-bg:#e9e2fb; --sel-tx:#5a32d6;
     --A:#2f9e41; --B:#5bbd3a; --C:#b6d136; --D:#f4e500; --E:#f6b13b; --F:#ef7d2a; --G:#e3151b;
-    --gA:#e4f1dc; --gB:#dceac9; --gC:#f5dee6; --gD:#efd0dc; --gE:#dfa9c0; --gF:#a875a0; --gG:#7a5388;
   }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--txt);overflow:hidden}
   #map{position:absolute;inset:0 390px 0 0}
-  /* ---- top center geolocator ---- */
+  .maplibregl-popup-content{font-size:12px;line-height:1.5;color:#1f1a2e}
   #geo{position:absolute;top:14px;left:50%;transform:translateX(-50%);width:430px;z-index:1200;max-width:38vw}
   #geo .box{display:flex;align-items:center;gap:8px;background:#15121dEE;border:1px solid var(--border);
     border-radius:11px;padding:10px 13px;backdrop-filter:blur(6px);box-shadow:0 6px 24px #0007}
   #geo input{flex:1;background:none;border:none;outline:none;color:var(--txt);font-size:13.5px}
-  #geo svg{flex:none;opacity:.7}
   #suggest{margin-top:6px;background:#181423F2;border:1px solid var(--border);border-radius:11px;overflow:hidden;display:none;box-shadow:0 12px 30px #0009}
   #suggest div{padding:9px 14px;font-size:13px;cursor:pointer;border-bottom:1px solid #ffffff0d}
   #suggest div:hover{background:var(--panel3)}
   #suggest div small{color:var(--muted)}
-  /* ---- top-left basemap toggle ---- */
   #basemap{position:absolute;top:14px;left:14px;z-index:1200;display:flex;background:#15121dEE;border:1px solid var(--border);
     border-radius:10px;padding:4px;gap:3px;box-shadow:0 6px 20px #0007}
   #basemap button{background:none;border:none;color:var(--muted);font-size:12.5px;padding:6px 12px;border-radius:7px;cursor:pointer}
   #basemap button.on{background:var(--panel3);color:#fff;font-weight:600}
-  /* ---- right panel ---- */
-  #panel{position:absolute;top:0;right:0;width:390px;height:100%;background:var(--panel);border-left:1px solid var(--border);
-    display:flex;flex-direction:column}
+  #panel{position:absolute;top:0;right:0;width:390px;height:100%;background:var(--panel);border-left:1px solid var(--border);display:flex;flex-direction:column}
   .ptop{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center}
-  .ptop input{flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--txt);
-    padding:8px 10px;font-size:12.5px;outline:none}
+  .ptop input{flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--txt);padding:8px 10px;font-size:12.5px;outline:none}
   .ptop button{background:var(--panel2);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:8px 12px;font-size:12px;cursor:pointer}
   .scroll{flex:1;overflow-y:auto;padding:6px 16px 12px}
   .scroll::-webkit-scrollbar{width:9px}.scroll::-webkit-scrollbar-thumb{background:#3a3352;border-radius:9px;border:2px solid var(--panel)}
   .sec{padding:13px 0;border-bottom:1px solid #ffffff0a}
   .sec h3{margin:0 0 9px;font-size:12px;font-weight:600;color:#cfc9de;display:flex;align-items:center;gap:7px}
-  .sec h3 .i{opacity:.85}
   .seg{display:flex;flex-wrap:wrap;gap:6px}
-  .seg button{flex:1 1 auto;min-width:62px;background:var(--panel2);border:1px solid var(--border);color:var(--muted);
-    border-radius:8px;padding:8px 6px;font-size:12px;cursor:pointer;transition:.1s;white-space:nowrap}
+  .seg button{flex:1 1 auto;min-width:62px;background:var(--panel2);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:8px 6px;font-size:12px;cursor:pointer;transition:.1s;white-space:nowrap}
   .seg button.on{background:var(--sel-bg);border-color:var(--sel-bg);color:var(--sel-tx);font-weight:600}
   .seg.full button{flex:1 1 22%}
   .wide{width:100%;margin-top:6px;background:var(--panel2);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:9px;font-size:12px;cursor:pointer}
@@ -60,7 +52,7 @@
   .labels button{flex:1;border:2px solid transparent;border-radius:7px;padding:7px 0;font-weight:800;font-size:13px;cursor:pointer;color:#15121d;opacity:.34;transition:.1s}
   .labels button.on{opacity:1;border-color:#fff}
   .dA{background:var(--A)}.dB{background:var(--B)}.dC{background:var(--C)}.dD{background:var(--D)}.dE{background:var(--E)}.dF{background:var(--F)}.dG{background:var(--G);color:#fff}
-  .gA{background:var(--gA)}.gB{background:var(--gB)}.gC{background:var(--gC)}.gD{background:var(--gD)}.gE{background:var(--gE)}.gF{background:var(--gF);color:#fff}.gG{background:var(--gG);color:#fff}
+  .gA{background:#e4f1dc}.gB{background:#dceac9}.gC{background:#f5dee6}.gD{background:#efd0dc}.gE{background:#dfa9c0}.gF{background:#a875a0;color:#fff}.gG{background:#7a5388;color:#fff}
   .meta{font-size:11.5px;color:var(--muted);display:flex;justify-content:space-between;padding:3px 0}
   .meta b{color:#bcd4ff;font-weight:600}
   .src{font-size:11.5px;color:var(--accent2);text-decoration:none}
@@ -68,13 +60,10 @@
   .sw{width:34px;height:19px;background:var(--panel3);border-radius:20px;position:relative;cursor:pointer;transition:.15s}
   .sw i{position:absolute;top:2px;left:2px;width:15px;height:15px;background:#fff;border-radius:50%;transition:.15s}
   .sw.on{background:var(--accent)}.sw.on i{left:17px}
-  /* footer */
   .foot{display:flex;gap:9px;padding:11px 16px;border-top:1px solid var(--border)}
   .reset{flex:none;background:none;border:1px solid #5a2740;color:#ff6f9c;border-radius:9px;padding:11px 16px;font-size:12.5px;cursor:pointer;font-weight:600}
-  .go{flex:1;border:none;border-radius:9px;padding:11px;font-size:13.5px;font-weight:700;cursor:pointer;color:#fff;
-    background:linear-gradient(90deg,var(--accent2),var(--accent))}
+  .go{flex:1;border:none;border-radius:9px;padding:11px;font-size:13.5px;font-weight:700;cursor:pointer;color:#fff;background:linear-gradient(90deg,var(--accent2),var(--accent))}
   .go:disabled{opacity:.55;cursor:not-allowed}
-  /* drawer */
   #drawer{border-top:1px solid var(--border)}
   #drawerBar{background:linear-gradient(90deg,#3a2275,#5a32c0);padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;display:flex;justify-content:space-between;align-items:center}
   #drawerBar small{font-weight:500;opacity:.85}
@@ -85,25 +74,20 @@
   .item .a{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .item .s{font-size:10.5px;color:var(--muted);margin-top:1px}
   .ges{font-size:9.5px;padding:1px 5px;border-radius:4px;font-weight:800;color:#15121d}
-  .pin{font-weight:800;font-size:11px;color:#15121d;border:2px solid #fff;border-radius:50%;width:23px;height:23px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px #0008}
-  .rad-tip{background:#15121dEE;color:#fff;border:1px solid var(--accent);border-radius:6px;padding:2px 7px;font-size:11px;font-weight:600;white-space:nowrap}
-  .leaflet-popup-content{font-size:12px;line-height:1.5}
+  .pin{font-weight:800;font-size:11px;color:#15121d;border:2px solid #fff;border-radius:50%;width:23px;height:23px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px #0008;cursor:pointer}
+  .pin.seen{filter:grayscale(.7);opacity:.55}
+  .hdl{width:14px;height:14px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px #0008;cursor:grab}
+  .rad-tip{position:absolute;transform:translate(12px,-50%);background:#15121dEE;color:#fff;border:1px solid var(--accent);border-radius:6px;padding:2px 7px;font-size:11px;font-weight:600;white-space:nowrap;pointer-events:none}
   .spin{display:inline-block;width:13px;height:13px;border:2px solid #fff5;border-top-color:#fff;border-radius:50%;animation:r .7s linear infinite;vertical-align:-2px;margin-right:7px}
   @keyframes r{to{transform:rotate(360deg)}}
   .note{font-size:10.5px;color:#6f6885;padding:2px 0 0}
-  #display{position:absolute;left:14px;bottom:18px;z-index:1200;background:#15121dF0;border:1px solid var(--border);
-    border-radius:10px;padding:6px;display:flex;flex-direction:column;gap:2px;box-shadow:0 6px 20px #0007;width:206px}
-  #display button{display:flex;align-items:center;gap:9px;background:none;border:none;color:var(--muted);font-size:12px;
-    padding:7px 9px;border-radius:7px;cursor:pointer;text-align:left;width:100%}
+  #display{position:absolute;left:14px;bottom:18px;z-index:1200;background:#15121dF0;border:1px solid var(--border);border-radius:10px;padding:6px;display:flex;flex-direction:column;gap:2px;box-shadow:0 6px 20px #0007;width:206px}
+  #display button{display:flex;align-items:center;gap:9px;background:none;border:none;color:var(--muted);font-size:12px;padding:7px 9px;border-radius:7px;cursor:pointer;text-align:left;width:100%}
   #display button.on{background:var(--panel3);color:#fff}
   #display .dot{width:9px;height:9px;border-radius:50%;background:#5a5470;flex:none}
   #display button.on .dot{background:var(--accent)}
-  .pin.seen{filter:grayscale(.7);opacity:.55}
-  /* ---- panneau détail « DPE ADEME » (réplique cadastre : clic sur une lettre) ---- */
-  #dpePanel{position:absolute;top:14px;right:404px;width:374px;max-height:calc(100% - 28px);z-index:1300;
-    background:#efe9f7;border-radius:13px;box-shadow:0 16px 46px #000a;display:none;flex-direction:column;overflow:hidden}
-  #dpePanel .dpHead{background:#2f0a63;color:#fff;font-weight:700;font-size:14px;letter-spacing:.3px;
-    padding:13px 16px;display:flex;justify-content:space-between;align-items:center;flex:none}
+  #dpePanel{position:absolute;top:14px;right:404px;width:374px;max-height:calc(100% - 28px);z-index:1300;background:#efe9f7;border-radius:13px;box-shadow:0 16px 46px #000a;display:none;flex-direction:column;overflow:hidden}
+  #dpePanel .dpHead{background:#2f0a63;color:#fff;font-weight:700;font-size:14px;letter-spacing:.3px;padding:13px 16px;display:flex;justify-content:space-between;align-items:center;flex:none}
   #dpePanel .dpHead .x{cursor:pointer;font-size:15px;line-height:1;opacity:.85;padding:2px 4px;border-radius:6px}
   #dpePanel .dpHead .x:hover{opacity:1;background:#ffffff22}
   #dpeBody{padding:11px;overflow-y:auto}
@@ -149,9 +133,9 @@
 <div id="display">
   <button data-m="dpe" class="on"><span class="dot"></span>Marqueurs DPE</button>
   <button data-m="ges"><span class="dot"></span>Marqueurs GES</button>
-  <button data-t="bati"><span class="dot"></span>Contour des bâtiments</button>
-  <button data-t="baties"><span class="dot"></span>Parcelles bâties</button>
-  <button data-t="nus"><span class="dot"></span>Terrains nus</button>
+  <button data-t="bati"><span class="dot"></span>Bâtiments (cadastre)</button>
+  <button data-t="cad" class="on"><span class="dot"></span>Parcelles cadastrales</button>
+  <button data-t="num" class="on"><span class="dot"></span>Numéros de parcelle</button>
   <button data-t="vues"><span class="dot"></span>Parcelles déjà vues</button>
 </div>
 
@@ -251,6 +235,7 @@
     <div class="sec">
       <div class="meta"><span>Dernière mise à jour ADEME :</span><b id="majAdeme">—</b></div>
       <div class="meta"><span>Source officielle :</span><a class="src" href="https://data.ademe.fr/datasets/dpe03existant" target="_blank">data.ademe.fr</a></div>
+      <div class="meta"><span>Cadastre :</span><a class="src" href="https://geoservices.ign.fr/services-web-experts-parcellaire" target="_blank">IGN Parcellaire Express (PCI)</a></div>
     </div>
 
     <div class="sec" style="border:none">
@@ -275,7 +260,8 @@
 </div>
 <div class="dpMenu" id="dpMenu"></div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
 <script>
 const ADEME="https://data.ademe.fr/data-fair/api/v1/datasets/dpe03existant/lines";
 const BAN="https://api-adresse.data.gouv.fr/search/";
@@ -285,183 +271,211 @@ const SELECT=["numero_dpe","etiquette_dpe","etiquette_ges","type_batiment","surf
  "date_etablissement_dpe","adresse_ban","code_postal_ban","nom_commune_ban","periode_construction",
  "conso_5_usages_par_m2_ep","emission_ges_5_usages_par_m2","identifiant_ban","complement_adresse_logement","_geopoint"].join(",");
 
-/* ---------- map + basemaps (IGN) ---------- */
-const map=L.map("map",{zoomControl:true}).setView([46.6,2.4],6);  // France entière par défaut
+/* ---------- basemaps (raster) + cadastre PCI (tuiles vectorielles IGN) ---------- */
 const wmts=(l,f)=>"https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER="+l+
   "&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT="+f;
-const bases={
-  ign:L.tileLayer(wmts("GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2","image/png"),{attribution:"© IGN/Géoplateforme",maxZoom:19}),
-  plan:L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",{attribution:"© OSM © CARTO",maxZoom:20,subdomains:"abcd"}),
-  sat:L.tileLayer(wmts("ORTHOIMAGERY.ORTHOPHOTOS","image/jpeg"),{attribution:"© IGN/Géoplateforme",maxZoom:20})
+const BASE={
+  ign:{tiles:[wmts("GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2","image/png")],attribution:"© IGN/Géoplateforme"},
+  plan:{tiles:["https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png","https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"],attribution:"© OSM © CARTO"},
+  sat:{tiles:[wmts("ORTHOIMAGERY.ORTHOPHOTOS","image/jpeg")],attribution:"© IGN/Géoplateforme"}
 };
-let curBase=bases.sat.addTo(map);  // Satellite par défaut à l'ouverture
-/* parcelles cadastrales en vecteur, tracées en vert (comme Cadastre.com) */
-const parcelGeo=L.geoJSON(null,{style:{color:"#39e63a",weight:1.1,fillColor:"#39e63a",fillOpacity:.05},
-  onEachFeature:(f,l)=>{const p=f.properties||{};l.bindPopup("Parcelle "+(p.section||"")+" "+(p.numero||"")+"<br>"+(p.contenance!=null?p.contenance+" m²":"")+(p.nom_com?" · "+p.nom_com:"")+(p.idu?"<br><small>"+p.idu+"</small>":""));}
-}).addTo(map);
-let pTmr;
-function loadParcels(){
-  clearTimeout(pTmr);
-  if(map.getZoom()<16){parcelGeo.clearLayers();return;}
-  pTmr=setTimeout(async()=>{
-    const b=map.getBounds(),bbox=b.getSouth()+","+b.getWest()+","+b.getNorth()+","+b.getEast();
-    try{const r=await fetch("https://data.geopf.fr/wfs/ows?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=CADASTRALPARCELS.PARCELLAIRE_EXPRESS:parcelle&SRSNAME=CRS:84&OUTPUTFORMAT=application/json&COUNT=2500&BBOX="+bbox);
-      const d=await r.json();parcelGeo.clearLayers();parcelGeo.addData(d);if(typeof styleParcels==="function")styleParcels();}catch(e){}
-  },350);
-}
+const style={
+  version:8,
+  glyphs:"https://data.geopf.fr/annexes/ressources/vectorTiles/fonts/{fontstack}/{range}.pbf",
+  sources:{
+    base:{type:"raster",tiles:BASE.sat.tiles,tileSize:256,attribution:BASE.sat.attribution,maxzoom:20},
+    pci:{type:"vector",tiles:["https://data.geopf.fr/tms/1.0.0/PCI/{z}/{x}/{y}.pbf"],scheme:"xyz",minzoom:0,maxzoom:18,attribution:"Cadastre © DGFiP / IGN"},
+    zone:{type:"geojson",data:{type:"FeatureCollection",features:[]}},
+    inner:{type:"geojson",data:{type:"FeatureCollection",features:[]}}
+  },
+  layers:[
+    {id:"base",type:"raster",source:"base"},
+    {id:"pci-bati",type:"fill",source:"pci","source-layer":"batiment",minzoom:17,paint:{"fill-color":"#c17c74","fill-opacity":.35},layout:{visibility:"none"}},
+    {id:"pci-parcelle-fill",type:"fill",source:"pci","source-layer":"parcelle",minzoom:15,paint:{"fill-color":"#ff8000","fill-opacity":.06}},
+    {id:"pci-parcelle",type:"line",source:"pci","source-layer":"parcelle",minzoom:15,paint:{"line-color":"#39e63a","line-width":["interpolate",["linear"],["zoom"],15,1,18,2.2]},layout:{"line-join":"bevel"}},
+    {id:"pci-feuille",type:"line",source:"pci","source-layer":"feuille",minzoom:14,paint:{"line-color":"#39e63a","line-width":1,"line-opacity":.5}},
+    {id:"pci-num",type:"symbol",source:"pci","source-layer":"localisant",minzoom:17,layout:{"text-field":["get","numero"],"text-size":12,"text-font":["Source Sans Pro Bold Italic"]},paint:{"text-color":"#1f7a1f","text-halo-color":"#ffffff","text-halo-width":2}},
+    {id:"zone-fill",type:"fill",source:"zone",paint:{"fill-color":"#7c4dff","fill-opacity":.10}},
+    {id:"inner-line",type:"line",source:"inner",paint:{"line-color":"#9a6bff","line-width":1.2,"line-dasharray":[2,2]}},
+    {id:"zone-line",type:"line",source:"zone",paint:{"line-color":"#9a6bff","line-width":1.5}}
+  ]
+};
+const map=new maplibregl.Map({container:"map",style,center:[2.4,46.6],zoom:5,attributionControl:false});
+map.addControl(new maplibregl.NavigationControl({showCompass:false}),"top-right");
+map.addControl(new maplibregl.AttributionControl({compact:true}));
+
+let baseName="sat";
 document.querySelectorAll("#basemap button").forEach(b=>b.onclick=()=>{
   document.querySelectorAll("#basemap button").forEach(x=>x.classList.remove("on"));b.classList.add("on");
-  map.removeLayer(curBase);curBase=bases[b.dataset.b].addTo(map);curBase.bringToBack();
+  baseName=b.dataset.b;
+  map.getSource("base").setTiles(BASE[baseName].tiles);
 });
-const markers=L.layerGroup().addTo(map);
+
+/* ---------- toggles d'affichage cadastre/bâtiments ---------- */
+function setVis(id,on){if(map.getLayer(id))map.setLayoutProperty(id,"visibility",on?"visible":"none");}
+const disp={bati:false,cad:true,num:true,vues:false};
+document.querySelectorAll('#display [data-t]').forEach(b=>b.onclick=()=>{
+  const k=b.dataset.t;disp[k]=!disp[k];b.classList.toggle("on",disp[k]);
+  if(k==="bati")setVis("pci-bati",disp.bati);
+  else if(k==="cad"){setVis("pci-parcelle",disp.cad);setVis("pci-parcelle-fill",disp.cad);setVis("pci-feuille",disp.cad);}
+  else if(k==="num")setVis("pci-num",disp.num);
+  else if(k==="vues")render(lastTotal,lastApprox);
+});
+
+/* ---------- markers DPE/GES (HTML) ---------- */
+let markerMode="dpe";
+let dpeMarkers=[];
+function clearMarkers(){dpeMarkers.forEach(m=>m.remove());dpeMarkers=[];}
+document.querySelectorAll('#display [data-m]').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#display [data-m]').forEach(x=>x.classList.remove("on"));b.classList.add("on");
+  markerMode=b.dataset.m;render(lastTotal,lastApprox);
+});
+const GESC={A:"#3a9b6e",B:"#5fb37e",C:"#caa2cf",D:"#b483c6",E:"#9a5fb4",F:"#7b3f9e",G:"#5d2e86"};
 
 /* ---------- editable zones (cercle / donut / rectangle / polygone) ---------- */
 let zone="cercle";
-let center=[47.394,0.687], radius=350, inner=150;
-let rect=null;          // {s,w,n,e}
-let poly=[];            // [[lat,lon],...]
-let adminPoly=null, adminCode=null, adminLabel="";  // ville / quartiers / plu
-let shapeLayer=null, innerLayer=null, handles=[];
+let center=[0.687,47.394], radius=350, inner=150;   // center = [lon,lat]
+let rect=null;            // turf bbox [w,s,e,n]
+let poly=[];              // [[lon,lat],...]
+let adminPoly=null, adminCode=null, adminLabel="";
+let handles=[];
 const ADMIN=["ville","quartiers","plu"];
-const SHAPE={color:"#9a6bff",weight:1.5,fillColor:"#7c4dff",fillOpacity:.10};
-
-function dot(color){return L.divIcon({className:"",html:'<div style="width:14px;height:14px;border-radius:50%;background:'+color+';border:2px solid #fff;box-shadow:0 1px 4px #0008"></div>',iconSize:[14,14]});}
-function tip(t){return {permanent:true,direction:"right",className:"rad-tip",offset:[8,0]};}
+function hdlEl(color){const d=document.createElement("div");d.className="hdl";d.style.background=color;return d;}
+function clearHandles(){handles.forEach(h=>h.remove());handles=[];}
+function setZone(geojson){map.getSource("zone").setData(geojson||{type:"FeatureCollection",features:[]});}
+function setInner(geojson){map.getSource("inner").setData(geojson||{type:"FeatureCollection",features:[]});}
 function radLabel(r){return "Rayon : "+(r>=1000?(r/1000).toFixed(2)+" km":r+" m");}
-function eastPoint(c,r){return [c[0], L.latLng(c).toBounds(r*2).getEast()];}
-function mk(ll,color,t){const h=L.marker(ll,{icon:dot(color),draggable:true,zIndexOffset:700}).addTo(map);
-  if(t)h.bindTooltip(t,tip());handles.push(h);return h;}
-function clearShape(){[shapeLayer,innerLayer].forEach(l=>{if(l)map.removeLayer(l);});shapeLayer=innerLayer=null;
-  handles.forEach(h=>map.removeLayer(h));handles=[];}
-function normRect(){const s=Math.min(rect.s,rect.n),n=Math.max(rect.s,rect.n),w=Math.min(rect.w,rect.e),e=Math.max(rect.w,rect.e);rect={s,n,w,e};}
+function destPoint(c,distM,bearing){const d=turf.destination(c,distM/1000,bearing,{units:"kilometers"});return d.geometry.coordinates;}
+function mkHandle(lngLat,color,popupTxt){
+  const el=hdlEl(color);
+  const m=new maplibregl.Marker({element:el,draggable:true}).setLngLat(lngLat).addTo(map);
+  if(popupTxt){const p=new maplibregl.Popup({closeButton:false,closeOnClick:false,className:"",offset:12}).setText(popupTxt);m.setPopup(p);m.togglePopup();}
+  handles.push(m);return m;
+}
 
 function buildShape(){
-  clearShape();
+  clearHandles();
   if(ADMIN.includes(zone)){
-    if(adminPoly){shapeLayer=L.polygon(adminPoly,SHAPE).addTo(map);
-      if(adminLabel)shapeLayer.bindTooltip(adminLabel,{sticky:true});
-      try{map.fitBounds(shapeLayer.getBounds(),{padding:[30,30]});}catch(e){}}
+    if(adminPoly) setZone(turf.polygon([adminPoly[0]]));
+    else setZone(null);
+    setInner(null);
     return;
   }
   if(zone==="cercle"||zone==="donut"){
-    shapeLayer=L.circle(center,{...SHAPE,radius}).addTo(map);
-    if(zone==="donut") innerLayer=L.circle(center,{color:"#9a6bff",weight:1.2,dashArray:"4 4",fill:false,radius:inner}).addTo(map);
-    const eH=mk(eastPoint(center,radius),"#fff",radLabel(radius));
-    let iH=null; if(zone==="donut") iH=mk(eastPoint(center,inner),"#ffd24d","Trou : "+inner+" m");
-    const cH=mk(center,"#7c4dff");
-    cH.on("drag",e=>{center=[e.latlng.lat,e.latlng.lng];shapeLayer.setLatLng(center);
-      if(innerLayer)innerLayer.setLatLng(center);eH.setLatLng(eastPoint(center,radius));if(iH)iH.setLatLng(eastPoint(center,inner));});
+    setZone(turf.circle(center,radius/1000,{units:"kilometers",steps:64}));
+    if(zone==="donut") setInner(turf.circle(center,inner/1000,{units:"kilometers",steps:64})); else setInner(null);
+    const cH=mkHandle(center,"#7c4dff");
+    const eH=mkHandle(destPoint(center,radius,90),"#fff",radLabel(radius));
+    cH.on("drag",()=>{center=cH.getLngLat().toArray();setZone(turf.circle(center,radius/1000,{units:"kilometers",steps:64}));
+      if(zone==="donut")setInner(turf.circle(center,inner/1000,{units:"kilometers",steps:64}));
+      eH.setLngLat(destPoint(center,radius,90));if(iH)iH.setLngLat(destPoint(center,inner,90));});
     cH.on("dragend",auto);
-    eH.on("drag",e=>{radius=Math.max(zone==="donut"?inner+30:50,Math.round(map.distance(center,e.latlng)));
-      shapeLayer.setRadius(radius);eH.setTooltipContent(radLabel(radius));});
-    eH.on("dragend",()=>{eH.setLatLng(eastPoint(center,radius));auto();});
-    if(iH){iH.on("drag",e=>{inner=Math.max(30,Math.min(radius-30,Math.round(map.distance(center,e.latlng))));
-      innerLayer.setRadius(inner);iH.setTooltipContent("Trou : "+inner+" m");});
-      iH.on("dragend",()=>{iH.setLatLng(eastPoint(center,inner));auto();});}
+    eH.on("drag",()=>{radius=Math.max(zone==="donut"?inner+30:50,Math.round(turf.distance(center,eH.getLngLat().toArray(),{units:"kilometers"})*1000));
+      setZone(turf.circle(center,radius/1000,{units:"kilometers",steps:64}));if(eH.getPopup())eH.getPopup().setText(radLabel(radius));});
+    eH.on("dragend",()=>{eH.setLngLat(destPoint(center,radius,90));auto();});
+    var iH=null;
+    if(zone==="donut"){iH=mkHandle(destPoint(center,inner,90),"#ffd24d","Trou : "+inner+" m");
+      iH.on("drag",()=>{inner=Math.max(30,Math.min(radius-30,Math.round(turf.distance(center,iH.getLngLat().toArray(),{units:"kilometers"})*1000)));
+        setInner(turf.circle(center,inner/1000,{units:"kilometers",steps:64}));if(iH.getPopup())iH.getPopup().setText("Trou : "+inner+" m");});
+      iH.on("dragend",()=>{iH.setLngLat(destPoint(center,inner,90));auto();});}
   }
   else if(zone==="rectangle"){
-    if(!rect){const b=L.latLng(center).toBounds(radius*2);rect={s:b.getSouth(),w:b.getWest(),n:b.getNorth(),e:b.getEast()};}
-    shapeLayer=L.rectangle([[rect.s,rect.w],[rect.n,rect.e]],SHAPE).addTo(map);
-    const sw=mk([rect.s,rect.w],"#fff"), ne=mk([rect.n,rect.e],"#fff"),
-          ct=mk([(rect.s+rect.n)/2,(rect.w+rect.e)/2],"#7c4dff");
-    const upd=()=>{shapeLayer.setBounds([[rect.s,rect.w],[rect.n,rect.e]]);ct.setLatLng([(rect.s+rect.n)/2,(rect.w+rect.e)/2]);};
-    sw.on("drag",e=>{rect.s=e.latlng.lat;rect.w=e.latlng.lng;upd();});
-    ne.on("drag",e=>{rect.n=e.latlng.lat;rect.e=e.latlng.lng;upd();});
-    ct.on("drag",e=>{const h=(rect.n-rect.s)/2,w=(rect.e-rect.w)/2;
-      rect.s=e.latlng.lat-h;rect.n=e.latlng.lat+h;rect.w=e.latlng.lng-w;rect.e=e.latlng.lng+w;
-      shapeLayer.setBounds([[rect.s,rect.w],[rect.n,rect.e]]);sw.setLatLng([rect.s,rect.w]);ne.setLatLng([rect.n,rect.e]);});
-    [sw,ne,ct].forEach(h=>h.on("dragend",()=>{normRect();buildShape();auto();}));
+    if(!rect){const c=turf.circle(center,radius/1000,{units:"kilometers"});const bb=turf.bbox(c);rect=[bb[0],bb[1],bb[2],bb[3]];}
+    setZone(turf.bboxPolygon(rect));setInner(null);
+    const sw=mkHandle([rect[0],rect[1]],"#fff"), ne=mkHandle([rect[2],rect[3]],"#fff"),
+          ct=mkHandle([(rect[0]+rect[2])/2,(rect[1]+rect[3])/2],"#7c4dff");
+    const upd=()=>{setZone(turf.bboxPolygon(rect));ct.setLngLat([(rect[0]+rect[2])/2,(rect[1]+rect[3])/2]);};
+    sw.on("drag",()=>{const ll=sw.getLngLat();rect[0]=ll.lng;rect[1]=ll.lat;upd();});
+    ne.on("drag",()=>{const ll=ne.getLngLat();rect[2]=ll.lng;rect[3]=ll.lat;upd();});
+    ct.on("drag",()=>{const ll=ct.getLngLat();const hw=(rect[2]-rect[0])/2,hh=(rect[3]-rect[1])/2;
+      rect=[ll.lng-hw,ll.lat-hh,ll.lng+hw,ll.lat+hh];setZone(turf.bboxPolygon(rect));sw.setLngLat([rect[0],rect[1]]);ne.setLngLat([rect[2],rect[3]]);});
+    [sw,ne,ct].forEach(h=>h.on("dragend",()=>{rect=[Math.min(rect[0],rect[2]),Math.min(rect[1],rect[3]),Math.max(rect[0],rect[2]),Math.max(rect[1],rect[3])];buildShape();auto();}));
   }
   else if(zone==="polygone"){
-    if(poly.length<3){const b=L.latLng(center).toBounds(radius*2);
-      poly=[[b.getNorth(),b.getWest()],[b.getNorth(),b.getEast()],[b.getSouth(),b.getEast()],[b.getSouth(),b.getWest()]];}
-    shapeLayer=L.polygon(poly,SHAPE).addTo(map);
-    poly.forEach((p,i)=>{const h=mk(p,"#fff");
-      h.on("drag",e=>{poly[i]=[e.latlng.lat,e.latlng.lng];shapeLayer.setLatLngs(poly);});
+    if(poly.length<3){const c=turf.circle(center,radius/1000,{units:"kilometers"});const bb=turf.bbox(c);
+      poly=[[bb[0],bb[3]],[bb[2],bb[3]],[bb[2],bb[1]],[bb[0],bb[1]]];}
+    setZone(turf.polygon([[...poly,poly[0]]]));setInner(null);
+    poly.forEach((p,i)=>{const h=mkHandle(p,"#fff");
+      h.on("drag",()=>{const ll=h.getLngLat();poly[i]=[ll.lng,ll.lat];setZone(turf.polygon([[...poly,poly[0]]]));});
       h.on("dragend",auto);});
   }
 }
-function recenterTo(lat,lon,fly){
-  if(ADMIN.includes(zone)){
-    if(fly)map.setView([lat,lon],Math.max(map.getZoom(),14));
-    pickAdmin(lat,lon);return;
-  }
-  if(zone==="rectangle"&&rect){const h=(rect.n-rect.s)/2,w=(rect.e-rect.w)/2;rect={s:lat-h,n:lat+h,w:lon-w,e:lon+w};buildShape();}
-  else if(zone==="polygone"){/* on garde le polygone dessiné */}
-  else{center=[lat,lon];buildShape();}
-  if(fly)map.setView([lat,lon],Math.max(map.getZoom(),16));
+function recenterTo(lon,lat,fly){
+  if(ADMIN.includes(zone)){ if(fly)map.flyTo({center:[lon,lat],zoom:Math.max(map.getZoom(),14)}); pickAdmin(lon,lat); return; }
+  if(zone==="rectangle"&&rect){const hw=(rect[2]-rect[0])/2,hh=(rect[3]-rect[1])/2;rect=[lon-hw,lat-hh,lon+hw,lat+hh];buildShape();}
+  else if(zone==="polygone"){}
+  else{center=[lon,lat];buildShape();}
+  if(fly)map.flyTo({center:[lon,lat],zoom:Math.max(map.getZoom(),16)});
   auto();
 }
+
 /* ----- limites administratives (ville / quartiers / plu) ----- */
 function ringsFromGeo(g){
-  if(g.type==="Polygon")return g.coordinates.map(r=>r.map(c=>[c[1],c[0]]));
-  if(g.type==="MultiPolygon")return g.coordinates.flatMap(p=>p.map(r=>r.map(c=>[c[1],c[0]])));
+  if(g.type==="Polygon")return g.coordinates;
+  if(g.type==="MultiPolygon")return g.coordinates.flat();
   return [];
 }
-function pickAdmin(lat,lon){
-  if(zone==="ville")return fetchVille(lat,lon);
-  if(zone==="quartiers")return fetchIris(lat,lon);
-  if(zone==="plu")return fetchPlu(lat,lon);
+function pickAdmin(lon,lat){
+  if(zone==="ville")return fetchVille(lon,lat);
+  if(zone==="quartiers")return fetchIris(lon,lat);
+  if(zone==="plu")return fetchPlu(lon,lat);
 }
-async function fetchVille(lat,lon){
+async function fetchVille(lon,lat){
   goTx.innerHTML='<span class="spin"></span>Commune…';
   try{
     const r=await fetch("https://geo.api.gouv.fr/communes?lat="+lat+"&lon="+lon+"&fields=nom,code&format=geojson&geometry=contour");
     const d=await r.json(),f=d.features&&d.features[0];
     if(!f){alert("Aucune commune trouvée ici.");idle();return;}
     adminCode=f.properties.code;adminPoly=ringsFromGeo(f.geometry);adminLabel="Commune : "+f.properties.nom;
-    buildShape();auto();
+    setZone(f);fitTo(f);auto();
   }catch(e){alert("Erreur récupération commune.");idle();}
 }
-async function fetchIris(lat,lon){
+async function fetchIris(lon,lat){
   goTx.innerHTML='<span class="spin"></span>Quartier…';
   try{
     const r=await fetch("https://public.opendatasoft.com/api/records/1.0/search/?dataset=georef-france-iris-millesime&geofilter.distance="+lat+","+lon+",60&rows=10");
     const d=await r.json(),recs=d.records||[];
     if(!recs.length){alert("Aucun quartier (IRIS) trouvé ici.");idle();return;}
-    let chosen=recs.find(rec=>{const rg=ringsFromGeo(rec.fields.geo_shape);return rg[0]&&pointInPoly(lat,lon,rg[0]);})||recs[0];
+    let chosen=recs.find(rec=>{const rg=ringsFromGeo(rec.fields.geo_shape);return rg[0]&&pointIn(lon,lat,rg[0]);})||recs[0];
     adminCode=null;adminPoly=ringsFromGeo(chosen.fields.geo_shape);
     adminLabel="Quartier : "+chosen.fields.iris_name+" — "+chosen.fields.com_name;
-    buildShape();auto();
+    const f={type:"Feature",geometry:chosen.fields.geo_shape,properties:{}};setZone(f);fitTo(f);auto();
   }catch(e){alert("Erreur récupération du quartier.");idle();}
 }
-async function fetchPlu(lat,lon){
+async function fetchPlu(lon,lat){
   goTx.innerHTML='<span class="spin"></span>PLU…';
   try{
     const geom=encodeURIComponent(JSON.stringify({type:"Point",coordinates:[lon,lat]}));
     const r=await fetch("https://apicarto.ign.fr/api/gpu/zone-urba?geom="+geom);
     const d=await r.json(),f=d.features&&d.features[0];
-    if(!f){alert("Aucune zone PLU à cet endroit (la couverture du Géoportail de l'Urbanisme est partielle au niveau national).");go.disabled=false;goTx.textContent="Voir les parcelles";return;}
+    if(!f){alert("Aucune zone PLU à cet endroit (couverture partielle du Géoportail de l'Urbanisme).");idle();return;}
     const p=f.properties;adminCode=null;adminPoly=ringsFromGeo(f.geometry);
     adminLabel="PLU : "+(p.libelle||p.libelong||"Zone")+(p.typezone?" ("+p.typezone+")":"");
-    buildShape();auto();
-  }catch(e){alert("Erreur récupération PLU.");}
+    setZone(f);fitTo(f);auto();
+  }catch(e){alert("Erreur récupération PLU.");idle();}
 }
-function pointInPoly(lat,lon,pts){let inside=false;for(let i=0,j=pts.length-1;i<pts.length;j=i++){
-  const yi=pts[i][0],xi=pts[i][1],yj=pts[j][0],xj=pts[j][1];
+function fitTo(f){try{const b=turf.bbox(f);map.fitBounds([[b[0],b[1]],[b[2],b[3]]],{padding:40});}catch(e){}}
+function pointIn(lon,lat,ring){let inside=false;for(let i=0,j=ring.length-1;i<ring.length;j=i++){
+  const xi=ring[i][0],yi=ring[i][1],xj=ring[j][0],yj=ring[j][1];
   if(((yi>lat)!=(yj>lat))&&(lon<(xj-xi)*(lat-yi)/(yj-yi)+xi))inside=!inside;}return inside;}
 function geoParams(){
   if(zone==="ville"){return adminCode?{extraQs:'code_insee_ban:"'+adminCode+'"',contains:null}:null;}
   if(zone==="quartiers"||zone==="plu"){
     if(!adminPoly||!adminPoly[0])return null;
-    const ring=adminPoly[0],la=ring.map(p=>p[0]),lo=ring.map(p=>p[1]);
-    return {key:"bbox",val:Math.min(...lo)+","+Math.min(...la)+","+Math.max(...lo)+","+Math.max(...la),
-      contains:(y,x)=>pointInPoly(y,x,ring)};}
-  if(zone==="rectangle"&&rect){normRect();
-    return {key:"bbox",val:rect.w+","+rect.s+","+rect.e+","+rect.n,contains:null};}
+    const ring=adminPoly[0],lo=ring.map(p=>p[0]),la=ring.map(p=>p[1]);
+    return {key:"bbox",val:Math.min(...lo)+","+Math.min(...la)+","+Math.max(...lo)+","+Math.max(...la),contains:(x,y)=>pointIn(x,y,ring)};}
+  if(zone==="rectangle"&&rect){return {key:"bbox",val:rect[0]+","+rect[1]+","+rect[2]+","+rect[3],contains:null};}
   if(zone==="polygone"&&poly.length>=3){
-    const la=poly.map(p=>p[0]),lo=poly.map(p=>p[1]);
-    return {key:"bbox",val:Math.min(...lo)+","+Math.min(...la)+","+Math.max(...lo)+","+Math.max(...la),
-      contains:(y,x)=>pointInPoly(y,x,poly)};}
-  if(zone==="donut")
-    return {key:"geo_distance",val:center[1]+","+center[0]+","+radius,contains:(y,x)=>map.distance(center,[y,x])>=inner};
-  return {key:"geo_distance",val:center[1]+","+center[0]+","+radius,contains:null};
+    const lo=poly.map(p=>p[0]),la=poly.map(p=>p[1]);
+    return {key:"bbox",val:Math.min(...lo)+","+Math.min(...la)+","+Math.max(...lo)+","+Math.max(...la),contains:(x,y)=>pointIn(x,y,poly)};}
+  if(zone==="donut")return {key:"geo_distance",val:center[0]+","+center[1]+","+radius,contains:(x,y)=>turf.distance(center,[x,y],{units:"kilometers"})*1000>=inner};
+  return {key:"geo_distance",val:center[0]+","+center[1]+","+radius,contains:null};
 }
 map.on("click",e=>{
-  if(zone==="polygone"){poly.push([e.latlng.lat,e.latlng.lng]);buildShape();auto();}
-  else recenterTo(e.latlng.lat,e.latlng.lng,false);
+  if(e.originalEvent.target.classList&&e.originalEvent.target.classList.contains("hdl"))return;
+  if(zone==="polygone"){poly.push([e.lngLat.lng,e.lngLat.lat]);buildShape();auto();}
+  else recenterTo(e.lngLat.lng,e.lngLat.lat,false);
 });
-map.on("moveend",loadParcels);
 
 /* ---------- geolocator (BAN autocomplete) ---------- */
 const geoIn=document.getElementById("geoIn"), sug=document.getElementById("suggest");
@@ -471,7 +485,7 @@ geoIn.addEventListener("input",()=>{clearTimeout(tmr);const q=geoIn.value.trim()
     try{const r=await fetch(BAN+"?q="+encodeURIComponent(q)+"&limit=7&autocomplete=1");const d=await r.json();
       sug.innerHTML="";(d.features||[]).forEach(f=>{const div=document.createElement("div");
         const p=f.properties;div.innerHTML="<b>"+p.label+"</b>"+(p.context?" <small>· "+p.context+"</small>":"");
-        div.onclick=()=>{geoIn.value=p.label;sug.style.display="none";recenterTo(f.geometry.coordinates[1],f.geometry.coordinates[0],true);};
+        div.onclick=()=>{geoIn.value=p.label;sug.style.display="none";recenterTo(f.geometry.coordinates[0],f.geometry.coordinates[1],true);};
         sug.appendChild(div);});
       sug.style.display=d.features&&d.features.length?"block":"none";
     }catch(e){}
@@ -489,9 +503,9 @@ document.querySelectorAll("#zone button,#zone2 button").forEach(b=>b.onclick=()=
   zone=z; adminPoly=null; adminCode=null; adminLabel="";
   if(z==="polygone"){poly=[];geoIn.placeholder="Cliquez sur la carte pour ajouter des sommets…";}
   else geoIn.placeholder="Adresse, commune, N° parcelle…";
-  if(z==="ville"){buildShape();fetchVille(center[0],center[1]);return;}      // commune du centre courant
-  if(z==="quartiers"){clearShape();geoIn.placeholder="Cliquez sur la carte pour choisir un quartier (IRIS)…";goTx.textContent="Cliquez sur un quartier";return;}
-  if(z==="plu"){clearShape();geoIn.placeholder="Cliquez sur la carte pour choisir une zone PLU…";goTx.textContent="Cliquez sur une zone PLU";return;}
+  if(z==="ville"){clearHandles();fetchVille(center[0],center[1]);return;}
+  if(z==="quartiers"){clearHandles();setZone(null);geoIn.placeholder="Cliquez sur la carte pour choisir un quartier (IRIS)…";goTx.textContent="Cliquez sur un quartier";return;}
+  if(z==="plu"){clearHandles();setZone(null);geoIn.placeholder="Cliquez sur la carte pour choisir une zone PLU…";goTx.textContent="Cliquez sur une zone PLU";return;}
   buildShape(); auto();
 });
 function multi(id){const s=new Set();document.querySelectorAll("#"+id+" button").forEach(b=>b.onclick=()=>{
@@ -524,11 +538,10 @@ function buildQs(){
 const go=document.getElementById("go"),goTx=document.getElementById("goTx"),
   dpeCount=document.getElementById("dpeCount"),parcCount=document.getElementById("parcCount"),
   list=document.getElementById("list"),drawerBar=document.getElementById("drawerBar");
-let lastRows=[],aTmr;
+let lastRows=[],aTmr,lastTotal=0,lastApprox=false;
 function auto(){clearTimeout(aTmr);aTmr=setTimeout(run,450);}
 go.onclick=run;
 drawerBar.onclick=()=>{list.style.display=list.style.display==="block"?"none":"block";};
-
 function idle(t){go.disabled=false;goTx.textContent=t||"Voir les parcelles";}
 async function run(){
   const gp=geoParams();
@@ -545,61 +558,36 @@ async function run(){
     const r=await fetch(ADEME+"?"+params.toString());const d=await r.json();
     let rows=d.results||[];
     let total=d.total||rows.length, approx=false;
-    if(gp.contains){const before=rows.length;rows=rows.filter(row=>{const g=(row._geopoint||"").split(",");return g.length===2&&gp.contains(+g[0],+g[1]);});
+    if(gp.contains){const before=rows.length;rows=rows.filter(row=>{const g=(row._geopoint||"").split(",");return g.length===2&&gp.contains(+g[1],+g[0]);});
       approx=true; total=total>before?Math.round(total*rows.length/Math.max(before,1)):rows.length;}
     lastRows=rows;lastTotal=total;lastApprox=approx;render(total,approx);
   }catch(e){dpeCount.textContent="Erreur ADEME";}
   go.disabled=false;
 }
 
-/* ---------- toggles d'affichage (marqueurs DPE/GES, bâtiments, parcelles) ---------- */
-let markerMode="dpe", lastTotal=0, lastApprox=false;
-const GESC={A:"#3a9b6e",B:"#5fb37e",C:"#caa2cf",D:"#b483c6",E:"#9a5fb4",F:"#7b3f9e",G:"#5d2e86"};
-const buildings=L.tileLayer(wmts("BUILDINGS.BUILDINGS","image/png"),{maxZoom:20,opacity:.85});
+/* ---------- render markers + list ---------- */
+let byId={};
 let seen=new Set();try{seen=new Set(JSON.parse(localStorage.getItem("dpe_seen")||"[]"));}catch(e){}
 function markSeen(id){if(!id)return;seen.add(id);try{localStorage.setItem("dpe_seen",JSON.stringify([...seen]));}catch(e){}}
-const disp={bati:false,baties:false,nus:false,vues:false};
-document.querySelectorAll('#display [data-m]').forEach(b=>b.onclick=()=>{
-  document.querySelectorAll('#display [data-m]').forEach(x=>x.classList.remove("on"));b.classList.add("on");
-  markerMode=b.dataset.m;render(lastTotal,lastApprox);});
-document.querySelectorAll('#display [data-t]').forEach(b=>b.onclick=()=>{
-  const k=b.dataset.t;disp[k]=!disp[k];b.classList.toggle("on",disp[k]);
-  if(k==="bati"){disp.bati?buildings.addTo(map):map.removeLayer(buildings);}
-  else if(k==="vues"){render(lastTotal,lastApprox);}
-  else{styleParcels();}});
-function parcelBuilt(f){const rs=f.geometry?ringsFromGeo(f.geometry):[];
-  for(const row of lastRows){const p=(row._geopoint||"").split(",");if(p.length!==2)continue;
-    const la=+p[0],lo=+p[1];for(const ring of rs){if(pointInPoly(la,lo,ring))return true;}}return false;}
-function styleParcels(){
-  parcelGeo.eachLayer(l=>{
-    if(!disp.baties&&!disp.nus){l.setStyle({color:"#39e63a",fillColor:"#39e63a",fillOpacity:.05,opacity:1});return;}
-    const built=parcelBuilt(l.feature);
-    if(disp.baties&&!disp.nus)l.setStyle(built?{color:"#39e63a",fillColor:"#3aa0ff",fillOpacity:.28,opacity:1}:{opacity:0,fillOpacity:0});
-    else if(disp.nus&&!disp.baties)l.setStyle(!built?{color:"#ffd24d",fillColor:"#ffd24d",fillOpacity:.22,opacity:1}:{opacity:0,fillOpacity:0});
-    else l.setStyle(built?{color:"#39e63a",fillColor:"#3aa0ff",fillOpacity:.26,opacity:1}:{color:"#ffd24d",fillColor:"#ffd24d",fillOpacity:.2,opacity:1});
-  });
-}
-
 function render(total,approx){
-  markers.clearLayers();list.innerHTML="";byId={};
+  clearMarkers();list.innerHTML="";byId={};
   const parcels=new Set();let maj="";
   lastRows.forEach(row=>{
     const g=(row._geopoint||"").split(",");if(g.length!==2)return;
     const lat=+g[0],lon=+g[1],id=row.identifiant_ban||row._geopoint;parcels.add(id);
-    (byId[id]=byId[id]||{lat,lon,rows:[]}).rows.push(row);   // regroupe tous les DPE d'une même parcelle
+    (byId[id]=byId[id]||{lat,lon,rows:[]}).rows.push(row);
     if(row.date_etablissement_dpe>maj)maj=row.date_etablissement_dpe;
-    if(disp.vues&&!seen.has(id))return;                        // n'afficher que les parcelles déjà vues
+    if(disp.vues&&!seen.has(id))return;
     const dpe=row.etiquette_dpe||"?",ges=row.etiquette_ges||"?";
     const lab=markerMode==="ges"?ges:dpe, col=markerMode==="ges"?(GESC[ges]||"#888"):(C[dpe]||"#888");
-    const cls="pin"+(seen.has(id)?" seen":"");
-    const m=L.marker([lat,lon],{icon:L.divIcon({className:"",html:'<div class="'+cls+'" style="background:'+col+'">'+lab+'</div>',iconSize:[23,23]})}).addTo(markers);
-    m.on("click",()=>openDpePanel(id));
+    const el=document.createElement("div");el.className="pin"+(seen.has(id)?" seen":"");el.style.background=col;el.textContent=lab;
+    el.addEventListener("click",ev=>{ev.stopPropagation();openDpePanel(id);});
+    const m=new maplibregl.Marker({element:el}).setLngLat([lon,lat]).addTo(map);dpeMarkers.push(m);
     const it=document.createElement("div");it.className="item";
     it.innerHTML='<div class="chip" style="background:'+(C[dpe]||"#888")+'">'+dpe+'</div><div style="flex:1;min-width:0"><div class="a">'+(row.adresse_ban||"Adresse inconnue")+'</div><div class="s">'+(row.type_batiment||"")+" · "+(row.surface_habitable_logement||"?")+' m² · GES <span class="ges" style="background:'+(C[ges]||"#888")+'">'+ges+"</span> · "+fmt(row.date_etablissement_dpe)+"</div></div>";
     it.onclick=()=>openDpePanel(id);
     list.appendChild(it);
   });
-  if(parcelGeo.getLayers().length)styleParcels();
   const shown=lastRows.length, capped=total>shown;
   dpeCount.textContent=(approx?"≈":"")+total+" DPE"+(capped&&!approx?" (1000 affichés)":"");
   parcCount.textContent=parcels.size+(capped?"+ ":" ")+"parcelles";
@@ -608,25 +596,16 @@ function render(total,approx){
 }
 function fmt(d){if(!d)return"?";const p=(""+d).split("-");return p.length===3?p[2]+"/"+p[1]+"/"+p[0]:d;}
 
-/* ---------- panneau détail « DPE ADEME » (clic sur une lettre = réplique cadastre) ---------- */
-let byId={};
+/* ---------- panneau détail « DPE ADEME » (clic sur une lettre) ---------- */
 const GBADGE={A:"#d5c3ea",B:"#c1a3df",C:"#ad84d2",D:"#9a66c6",E:"#854cb3",F:"#6f349f",G:"#561d80"};
 const FRMOIS=["janv.","févr.","mars","avr.","mai","juin","juil.","août","sept.","oct.","nov.","déc."];
 function frMois(d){if(!d)return"?";const p=(""+d).split("-");if(p.length!==3)return d;return (+p[2])+" "+(FRMOIS[(+p[1])-1]||p[1])+" "+p[0];}
 function cap(s){s=s||"";return s.charAt(0).toUpperCase()+s.slice(1);}
-/* États de prospection = liste exacte de cadastre.com (catégorie DPE) */
 const ETATS=[
- ["a_prospecter","À Prospecter","#f2c200"],
- ["en_vente","En Vente","#2f9e54"],
- ["vendu","Vendu","#6b7280"],
- ["pas_interesse","Pas Intéressé","#e3151b"],
- ["renovation","Rénovation","#8a8a2f"],
- ["location","Location","#3a6ff0"],
- ["autre","Autre","#9d96b0"]
+ ["a_prospecter","À Prospecter","#f2c200"],["en_vente","En Vente","#2f9e54"],["vendu","Vendu","#6b7280"],
+ ["pas_interesse","Pas Intéressé","#e3151b"],["renovation","Rénovation","#8a8a2f"],["location","Location","#3a6ff0"],["autre","Autre","#9d96b0"]
 ];
 const etatOf=k=>ETATS.find(e=>e[0]===k);
-/* ⭐ BRANCHEMENT PROSPECTION : on écrit dans le localStorage["prospects"] PARTAGÉ
-   (même clé/format que prospection-module.html) → le DPE apparaît dans « Mes DPE ». */
 function loadProsp(){try{return JSON.parse(localStorage.getItem("prospects")||"[]");}catch(e){return [];}}
 function saveProsp(a){try{localStorage.setItem("prospects",JSON.stringify(a));}catch(e){}}
 function prospOf(ref){return loadProsp().find(p=>p.ref===ref)||null;}
@@ -645,7 +624,7 @@ const dpMenu=document.getElementById("dpMenu");
 function openDpePanel(id){
   const grp=byId[id];if(!grp||!grp.rows.length)return;
   markSeen(id);
-  try{map.setView([grp.lat,grp.lon],Math.max(map.getZoom(),18));}catch(e){}
+  try{map.flyTo({center:[grp.lon,grp.lat],zoom:Math.max(map.getZoom(),18)});}catch(e){}
   const body=document.getElementById("dpeBody");body.innerHTML="";
   grp.rows.forEach((row,i)=>{
     const dpe=row.etiquette_dpe||"?",ges=row.etiquette_ges||"?";
@@ -704,16 +683,14 @@ function showEtatMenu(anchor,row,grp,ref,refresh){
 document.getElementById("dpeClose").onclick=()=>{document.getElementById("dpePanel").style.display="none";dpMenu.style.display="none";};
 document.addEventListener("click",e=>{if(!dpMenu.contains(e.target)&&!e.target.closest(".etat"))dpMenu.style.display="none";});
 
-/* ---------- reset ---------- */
 document.getElementById("reset").onclick=()=>location.reload();
 
-buildShape();
-dpeCount.textContent="—";parcCount.textContent="Recherchez une adresse ou une zone";goTx.textContent="Voir les parcelles";
-
-/* ---------- pré-remplissage depuis « Chercher sur DPE » (module Cadastre / Localiser) ----------
-   URL : prototype-dpe.html?loc=1&lat&lon&type=maison|appartement&s=<surface>&dpe=<lettre>&ges=<lettre>
-   Propose des comparables : surface ±10 %, même type, même étiquette DPE/GES, centré sur le bien. */
-(function dpeFromQuery(){
+/* ---------- init ---------- */
+map.on("load",()=>{
+  buildShape();
+  dpeCount.textContent="—";parcCount.textContent="Recherchez une adresse ou une zone";goTx.textContent="Voir les parcelles";
+  /* pré-remplissage depuis « Chercher sur DPE » :
+     ?loc=1&lat&lon&type=maison|appartement&s=<surface>&dpe=<lettre>&ges=<lettre> */
   try{
     var q=new URLSearchParams(location.search);
     if(q.get("loc")!=="1")return;
@@ -723,9 +700,9 @@ dpeCount.textContent="—";parcCount.textContent="Recherchez une adresse ou une 
     if(ty){var tb=document.querySelector('#type button[data-t="'+ty+'"]');if(tb)tb.click();}
     if(/^[A-G]$/.test(dpe)){var db=document.querySelector('#dpeLab button[data-v="'+dpe+'"]');if(db)db.click();}
     if(/^[A-G]$/.test(ges)){var gb=document.querySelector('#gesLab button[data-v="'+ges+'"]');if(gb)gb.click();}
-    if(isFinite(lat)&&isFinite(lon)){center=[lat,lon];recenterTo(lat,lon,true);}
+    if(isFinite(lat)&&isFinite(lon)){center=[lon,lat];recenterTo(lon,lat,true);}
   }catch(err){console.warn("DPE: initFromQuery",err);}
-})();
+});
 </script>
 </body>
 </html>
