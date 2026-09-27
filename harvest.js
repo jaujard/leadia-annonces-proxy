@@ -165,6 +165,17 @@ async function upsert(rows) {
   const seen = new Map();
   for (const r of rows) seen.set(r.source + " " + r.reference, r);
   rows = [...seen.values()];
+  // 27/09 — regroupement par jeu de clés : un lot PostgREST doit avoir les mêmes clés sur toutes ses lignes (PGRST102).
+  // Les clés undefined (ex. price_* du 18/09) disparaissent au JSON.stringify : on envoie un lot par signature.
+  {
+    const groups = new Map();
+    for (const r of rows) {
+      const sig = Object.keys(r).filter(k => r[k] !== undefined).sort().join(",");
+      if (!groups.has(sig)) groups.set(sig, []);
+      groups.get(sig).push(r);
+    }
+    if (groups.size > 1) { for (const g of groups.values()) await upsert(g); return; }
+  }
   for (let i = 0; i < rows.length; i += UPSERT_CHUNK) {
     const chunk = rows.slice(i, i + UPSERT_CHUNK);
     const r = await sbFetch("/rest/v1/" + T_ANNONCES + "?on_conflict=source,reference", {
@@ -208,11 +219,43 @@ async function logRun(rec) {
   }).catch(() => {});
 }
 
+// ---- 27/09 — DPE numérique, GES, piscine, date du DPE : helpers ---------------------------
+// Sondage API du 27/09 (120 annonces du 37) : dpe_value / ges_value remplis par Square Habitat seulement ;
+// les kWh en texte sont dans legal_info (pas description) ; aucune clé piscine / date côté API.
+function dpeFirstOf() { for (var i = 0; i < arguments.length; i++) { var v = arguments[i]; if (v !== undefined && v !== null && v !== "") return v; } return null; }
+function dpeNum(v) { if (v == null || v === "") return null; var n = Number(String(v).replace(",", ".")); return isFinite(n) && n > 0 && n < 2000 ? n : null; }
+function dpeBool(v) { if (v == null || v === "") return null; if (typeof v === "boolean") return v; var s = String(v).toLowerCase(); return /^(1|true|oui|yes)$/.test(s) ? true : /^(0|false|non|no)$/.test(s) ? false : null; }
+function dpeDate(v) { if (v == null || v === "") return null; var d = new Date(v); return isNaN(d) ? null : d.toISOString().slice(0, 10); }
+function dpeTexte(a) { return [a.title, a.description, a.legal_info].filter(Boolean).join(" ").replace(/\u00a0/g, " "); }
+function dpeExtraitConso(a) {
+  var t = dpeTexte(a);
+  var m = t.match(/(\d{2,4})\s*kWh(?:\s*EP)?\s*\/?\s*m[\u00b22]/i) || t.match(/(?:DPE|consommation)[^\d]{0,40}(\d{2,4})\s*kWh/i);
+  return m ? dpeNum(m[1]) : null;
+}
+function dpeExtraitGes(a) { var m = dpeTexte(a).match(/(\d{1,3})\s*kg\s*(?:CO2|CO\u2082)/i); return m ? dpeNum(m[1]) : null; }
+function dpeExtraitPiscine(a) {
+  var t = dpeTexte(a);
+  if (!/\bpiscine\b/i.test(t)) return null;
+  var neg = /\b(sans|pas de|aucune|possibilit[\u00e9e]|constructible|piscinable)\b[^.]{0,20}\bpiscine\b|\bpiscine\b[^.]{0,20}\b(possible|envisageable|municipale|communale|collective)\b/i;
+  return !neg.test(t);
+}
+var DPE_MOIS = { janvier: 1, fevrier: 2, "f\u00e9vrier": 2, mars: 3, avril: 4, mai: 5, juin: 6, juillet: 7, aout: 8, "ao\u00fbt": 8, septembre: 9, octobre: 10, novembre: 11, decembre: 12, "d\u00e9cembre": 12 };
+function dpeExtraitDate(a) {
+  var t = dpeTexte(a);
+  var m = t.match(/(?:diagnostic|DPE)[^.|\n]{0,40}?(\d{1,2})\/(\d{1,2})\/(\d{4})/i);
+  if (m) return dpeDate(m[3] + "-" + m[2].padStart(2, "0") + "-" + m[1].padStart(2, "0"));
+  m = t.match(/(?:diagnostic|DPE)[^.|\n]{0,40}?(\d{1,2})(?:er)?\s+([a-z\u00e9\u00fb]+)\s+(\d{4})/i);
+  if (m && DPE_MOIS[m[2].toLowerCase()]) return dpeDate(m[3] + "-" + String(DPE_MOIS[m[2].toLowerCase()]).padStart(2, "0") + "-" + m[1].padStart(2, "0"));
+  return null;
+}
+// -------------------------------------------------------------------------------------------
 function mapRow(a, transaction) {
   return {
     source: a.source || "inconnu",
     reference: String(a.reference != null ? a.reference : (a.id != null ? a.id : "")),
     transaction_type: a.transaction_type || transaction,
+    dedup_key: a.dedup_key || null,
+    sources: Array.isArray(a.sources) ? a.sources : null,
     type: a.type != null ? a.type : null,
     price: num(a.price),
     price_per_m2: num(a.price_per_m2),
@@ -251,6 +294,20 @@ function mapRow(a, transaction) {
     is_internal: !!a.is_internal,
     published_at: a.published_at || null,
     last_seen_at: new Date().toISOString(),
+    // 27/09 — DPE numérique, GES, piscine, date du DPE (Leadia v1591). Clés toujours présentes (null) ;
+    // priorité API > extraction texte, recalculée à l'identique à chaque passage.
+    dpe_conso:     dpeNum(dpeFirstOf(a.dpe_value, a.energy_consumption, a.dpe_consumption, dpeExtraitConso(a))),
+    ges_emission:  dpeNum(dpeFirstOf(a.ges_value, a.ges_emission, dpeExtraitGes(a))),
+    dpe_conso_src: dpeNum(dpeFirstOf(a.dpe_value, a.energy_consumption, a.dpe_consumption)) != null ? "api" : (dpeExtraitConso(a) != null ? "description" : null),
+    piscine:       dpeBool(dpeFirstOf(a.has_pool, a.pool, a.piscine, dpeExtraitPiscine(a))),
+    dpe_date:      dpeDate(dpeFirstOf(a.dpe_date, a.energy_date, dpeExtraitDate(a))),
+    // 27/09 — legal_info brut de l'API (mentions légales, porte souvent le DPE en clair). Toujours présent (null si absent).
+    legal_info:    (a.legal_info != null && String(a.legal_info).trim() !== "") ? String(a.legal_info) : null,
+    // §6 clôture 18/09/2026 — dernier passage de collecte et historique de prix de l'API
+    source_updated_at: a.updated_at || null,
+    price_previous:   (a.price_history && a.price_history.previous != null && isFinite(Number(a.price_history.previous))) ? Number(a.price_history.previous) : undefined,
+    price_changed_at: (a.price_history && a.price_history.changed_at) ? a.price_history.changed_at : undefined,
+    price_changes:    (a.price_history && a.price_history.changes != null && isFinite(parseInt(a.price_history.changes, 10))) ? parseInt(a.price_history.changes, 10) : undefined,
     raw: KEEP_RAW ? a : null
   };
 }
