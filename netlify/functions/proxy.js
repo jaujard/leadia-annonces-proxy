@@ -8,8 +8,7 @@
  * Route /sat : relais image satellite/plan Mapbox Static (token MAPBOX_TOKEN serveur, jamais exposé).
  */
 const API_BASE = "https://cherchertrouver.immo/api/v1";
-const ALLOWED = /^(ping|annonces|annonces\/map|annonces\/[^/]+\/[^/]+|ptz\/zone)$/;
-
+   const ALLOWED = /^(ping|annonces|annonces\/map|annonces\/doublons|annonces\/[^/]+\/[^/]+|ptz\/zone)$/;
 exports.handler = async (event) => {
   const origin = process.env.ALLOWED_ORIGIN && process.env.ALLOWED_ORIGIN.length ? process.env.ALLOWED_ORIGIN : "*";
   const cors = {
